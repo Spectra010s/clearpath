@@ -51,7 +51,7 @@ jobs:
               -keyalg RSA \
               -keysize 2048 \
               -validity 365 \
-              -alias upload \
+              -alias clearpath \
               -storepass "$TEMP_PASS" \
               -keypass "$TEMP_PASS" \
               -dname "CN=ClearPath CI,O=ClearPath,C=US"

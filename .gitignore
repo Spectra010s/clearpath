@@ -20,3 +20,6 @@ debug.keystore
 *.keystore
 .build-outputs/
 
+
+# Firebase config (provided via CI secret / local download)
+app/google-services.json
