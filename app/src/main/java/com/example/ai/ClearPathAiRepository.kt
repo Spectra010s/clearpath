@@ -76,6 +76,8 @@ class ClearPathAiRepository {
                         "haptics",
                         "prefer_on_device_ai",
                         "show_camera_preview",
+                        "wake_phrase_mode",
+                        "auto_listen_on_open",
                         "translation_source_language",
                         "translation_target_language",
                         "routing_mode",

@@ -54,6 +54,8 @@ fun SettingsScreen(
     onHapticsChange: (Boolean) -> Unit,
     onSceneWatchChange: (Boolean) -> Unit,
     onShowPreviewChange: (Boolean) -> Unit,
+    onWakePhraseModeChange: (Boolean) -> Unit = {},
+    onAutoListenOnOpenChange: (Boolean) -> Unit = {},
     onPreferOnDeviceChange: (Boolean) -> Unit,
     onSelectVoice: (String) -> Unit,
     onRoutingModeChange: (RoutingProviderMode) -> Unit,
@@ -169,6 +171,22 @@ fun SettingsScreen(
                     checked = settings.showCameraPreview,
                     onCheckedChange = onShowPreviewChange,
                     testTag = "settings_show_preview_switch"
+                )
+
+                SettingToggleRow(
+                    title = "Wake-Phrase Mode (\"ClearPath activate\")",
+                    subtitle = "Runs a foreground microphone service with an ongoing notification so you can say \"ClearPath activate\" or \"Hey ClearPath\" hands-free. Android restricts closed-app hardware hotword to pre-installed system apps.",
+                    checked = settings.wakePhraseModeEnabled,
+                    onCheckedChange = onWakePhraseModeChange,
+                    testTag = "wake_phrase_switch"
+                )
+
+                SettingToggleRow(
+                    title = "Auto-Listen When App Opens",
+                    subtitle = "Starts listening automatically when ClearPath opens (ideal with \"Hey Google, open ClearPath\" or Assistant launch).",
+                    checked = settings.autoListenOnOpen,
+                    onCheckedChange = onAutoListenOnOpenChange,
+                    testTag = "auto_listen_on_open_switch"
                 )
 
                 SettingToggleRow(
@@ -299,7 +317,7 @@ fun SettingsScreen(
                     color = HighContrastText
                 )
                 Text(
-                    text = "Privacy: Microphone and camera never record in the background. Images are processed in memory on demand and discarded.",
+                    text = "Privacy & Wake Phrase: Microphone and camera never record silently in the background. When Wake-Phrase Mode is explicitly turned on, Android requires a visible persistent microphone notification and ClearPath can also be launched via your phone's Assistant gesture.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = RestrainedCyan
                 )

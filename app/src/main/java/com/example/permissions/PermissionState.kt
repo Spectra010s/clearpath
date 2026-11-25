@@ -3,6 +3,7 @@ package com.example.permissions
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 
 enum class ClearPathPermission(
@@ -13,7 +14,7 @@ enum class ClearPathPermission(
     MICROPHONE(
         manifestPermission = Manifest.permission.RECORD_AUDIO,
         title = "Microphone access",
-        rationale = "ClearPath uses your microphone only while a listening session is active so you can speak commands and ask questions hands-free. Audio is never recorded in the background."
+        rationale = "ClearPath uses your microphone only while a listening session is active or while you explicitly enable Wake-Phrase Mode with an ongoing notification."
     ),
     CAMERA(
         manifestPermission = Manifest.permission.CAMERA,
@@ -24,13 +25,23 @@ enum class ClearPathPermission(
         manifestPermission = Manifest.permission.ACCESS_FINE_LOCATION,
         title = "Location access",
         rationale = "ClearPath uses GPS only when you ask where you are or start walking guidance. Location tracking stops as soon as you end navigation."
+    ),
+    NOTIFICATIONS(
+        manifestPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.POST_NOTIFICATIONS
+        } else {
+            Manifest.permission.RECORD_AUDIO
+        },
+        title = "Notification access",
+        rationale = "Android requires a visible ongoing notification whenever ClearPath Wake-Phrase Mode is listening in the foreground."
     )
 }
 
 data class PermissionSnapshot(
     val hasMicrophone: Boolean = false,
     val hasCamera: Boolean = false,
-    val hasLocation: Boolean = false
+    val hasLocation: Boolean = false,
+    val hasNotifications: Boolean = true
 )
 
 object PermissionChecker {
@@ -39,10 +50,16 @@ object PermissionChecker {
         val cam = hasPermission(context, Manifest.permission.CAMERA)
         val fine = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val notifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            true
+        }
         return PermissionSnapshot(
             hasMicrophone = mic,
             hasCamera = cam,
-            hasLocation = fine || coarse
+            hasLocation = fine || coarse,
+            hasNotifications = notifications
         )
     }
 

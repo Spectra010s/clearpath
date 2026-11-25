@@ -164,6 +164,7 @@ object VoiceIntentParser {
             "speech speed", "speech rate", "voice speed", "talking speed",
             "on-device", "on device", "gemini nano",
             "camera preview", "viewfinder",
+            "wake phrase", "wake word", "hands free", "hands-free", "auto listen on open", "listen on open",
             "voice", "voices", "routing mode", "translation language", "target language", "source language"
         )
         val actionWords = listOf(
@@ -206,6 +207,16 @@ object VoiceIntentParser {
             )
             lower.contains("on-device") || lower.contains("on device") || lower.contains("gemini nano") -> OfflineSettingEdit(
                 settingKey = "prefer_on_device_ai",
+                booleanValue = desiredBool,
+                toggleBoolean = desiredBool == null && wantsToggle
+            )
+            lower.contains("wake phrase") || lower.contains("wake word") || lower.contains("hands free") || lower.contains("hands-free") -> OfflineSettingEdit(
+                settingKey = "wake_phrase_mode",
+                booleanValue = desiredBool,
+                toggleBoolean = desiredBool == null && wantsToggle
+            )
+            lower.contains("listen on open") || lower.contains("auto open") -> OfflineSettingEdit(
+                settingKey = "auto_listen_on_open",
                 booleanValue = desiredBool,
                 toggleBoolean = desiredBool == null && wantsToggle
             )

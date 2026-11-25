@@ -27,6 +27,8 @@ data class ClearPathSettings(
     val hapticsEnabled: Boolean = true,
     val showCameraPreview: Boolean = true,
     val preferOnDeviceAi: Boolean = false,
+    val wakePhraseModeEnabled: Boolean = false,
+    val autoListenOnOpen: Boolean = false,
     val routingProviderMode: String = "OPEN_ROUTE_SERVICE",
     val orsApiKey: String = "",
     val customRoutingBaseUrl: String = "",
@@ -47,6 +49,8 @@ class ClearPathPreferencesRepository(private val context: Context) {
         val HAPTICS = booleanPreferencesKey("haptics")
         val SHOW_PREVIEW = booleanPreferencesKey("show_preview")
         val PREFER_ON_DEVICE = booleanPreferencesKey("prefer_on_device")
+        val WAKE_PHRASE = booleanPreferencesKey("wake_phrase")
+        val AUTO_LISTEN_ON_OPEN = booleanPreferencesKey("auto_listen_on_open")
         val ROUTING_MODE = stringPreferencesKey("routing_mode")
         val ORS_API_KEY = stringPreferencesKey("ors_api_key")
         val CUSTOM_ROUTING_URL = stringPreferencesKey("custom_routing_url")
@@ -66,6 +70,8 @@ class ClearPathPreferencesRepository(private val context: Context) {
             hapticsEnabled = prefs[Keys.HAPTICS] ?: true,
             showCameraPreview = prefs[Keys.SHOW_PREVIEW] ?: true,
             preferOnDeviceAi = prefs[Keys.PREFER_ON_DEVICE] ?: false,
+            wakePhraseModeEnabled = prefs[Keys.WAKE_PHRASE] ?: false,
+            autoListenOnOpen = prefs[Keys.AUTO_LISTEN_ON_OPEN] ?: false,
             routingProviderMode = prefs[Keys.ROUTING_MODE] ?: "OPEN_ROUTE_SERVICE",
             orsApiKey = prefs[Keys.ORS_API_KEY] ?: "",
             customRoutingBaseUrl = prefs[Keys.CUSTOM_ROUTING_URL] ?: "",
@@ -110,6 +116,14 @@ class ClearPathPreferencesRepository(private val context: Context) {
 
     suspend fun setPreferOnDeviceAi(enabled: Boolean) {
         context.clearPathDataStore.edit { it[Keys.PREFER_ON_DEVICE] = enabled }
+    }
+
+    suspend fun setWakePhraseModeEnabled(enabled: Boolean) {
+        context.clearPathDataStore.edit { it[Keys.WAKE_PHRASE] = enabled }
+    }
+
+    suspend fun setAutoListenOnOpen(enabled: Boolean) {
+        context.clearPathDataStore.edit { it[Keys.AUTO_LISTEN_ON_OPEN] = enabled }
     }
 
     suspend fun setRoutingProviderMode(modeName: String) {

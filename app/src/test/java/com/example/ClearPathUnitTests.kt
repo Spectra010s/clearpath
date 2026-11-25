@@ -11,9 +11,11 @@ import com.example.navigation.RouteStep
 import com.example.translation.LanguageCatalog
 import com.example.translation.LanguageCapabilityReport
 import com.example.voice.TtsSupportStatus
+import com.example.voice.WakePhraseDetector
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -184,5 +186,24 @@ class ClearPathUnitTests {
         assertNotNull(editSpeed)
         assertEquals("speech_rate", editSpeed?.settingKey)
         assertEquals(1.4f, editSpeed?.floatValue)
+
+        val editWake = VoiceIntentParser.parseOfflineSettingEdit("Turn on wake phrase mode")
+        assertNotNull(editWake)
+        assertEquals("wake_phrase_mode", editWake?.settingKey)
+        assertEquals(true, editWake?.booleanValue)
+    }
+
+    @Test
+    fun wakePhraseDetector_matchesAndExtractsTrailingCommand() {
+        val exact = WakePhraseDetector.match("ClearPath activate")
+        assertNotNull(exact)
+        assertNull(exact?.trailingCommand)
+
+        val spaced = WakePhraseDetector.match("Hey Clear Path, what is in front of me?")
+        assertNotNull(spaced)
+        assertEquals("what is in front of me", spaced?.trailingCommand)
+
+        val nonWake = WakePhraseDetector.match("Take me to the nearest pharmacy")
+        assertNull(nonWake)
     }
 }

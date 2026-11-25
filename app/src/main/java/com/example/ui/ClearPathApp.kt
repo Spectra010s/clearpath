@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +61,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun ClearPathApp(
     isWideScreen: Boolean,
+    assistantTriggerSequence: Int = 0,
     viewModel: ClearPathViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -72,6 +74,12 @@ fun ClearPathApp(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val permissions by viewModel.permissions.collectAsStateWithLifecycle()
     val isCameraReady by viewModel.isCameraReady.collectAsStateWithLifecycle()
+
+    LaunchedEffect(assistantTriggerSequence) {
+        if (assistantTriggerSequence > 0) {
+            viewModel.onExternalAssistantTrigger()
+        }
+    }
 
     // Keep ImageCapture & SceneWatch bound regardless of which visual tab is currently open.
     DisposableEffect(permissions.hasCamera, activeTab, settings.showCameraPreview, lifecycleOwner) {
@@ -129,6 +137,12 @@ fun ClearPathApp(
         viewModel.onPermissionResult(ClearPathPermission.LOCATION, granted)
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onPermissionResult(ClearPathPermission.NOTIFICATIONS, granted)
+    }
+
     if (activeTab != ClearPathTab.ASSIST) {
         BackHandler {
             viewModel.selectTab(ClearPathTab.ASSIST)
@@ -152,6 +166,12 @@ fun ClearPathApp(
                                 Manifest.permission.ACCESS_COARSE_LOCATION
                             )
                         )
+                    ClearPathPermission.NOTIFICATIONS ->
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            viewModel.onPermissionResult(ClearPathPermission.NOTIFICATIONS, true)
+                        }
                 }
             },
             onDismiss = { viewModel.dismissPermissionPrompt() }
@@ -307,6 +327,8 @@ fun ClearPathApp(
                         onHapticsChange = viewModel::setHapticsEnabled,
                         onSceneWatchChange = viewModel::setSceneWatchEnabled,
                         onShowPreviewChange = viewModel::setShowCameraPreview,
+                        onWakePhraseModeChange = viewModel::setWakePhraseModeEnabled,
+                        onAutoListenOnOpenChange = viewModel::setAutoListenOnOpen,
                         onPreferOnDeviceChange = viewModel::setPreferOnDevice,
                         onSelectVoice = viewModel::setPreferredVoiceName,
                         onRoutingModeChange = viewModel::setRoutingProviderMode,

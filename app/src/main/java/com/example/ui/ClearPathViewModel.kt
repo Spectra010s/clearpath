@@ -34,6 +34,9 @@ import com.example.voice.VoiceCoordinator
 import com.example.voice.VoiceEvent
 import com.example.voice.VoicePhase
 import com.example.voice.VoiceUiState
+import com.example.voice.WakePhraseBridge
+import com.example.voice.WakePhraseDetector
+import com.example.voice.WakePhraseService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -123,6 +126,8 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     private var locationUpdatesJob: Job? = null
     private var compassJob: Job? = null
     private var pendingVoiceAfterMicPermission = false
+    private var pendingWakePhraseAfterMicPermission = false
+    private var pendingExternalActivation = false
     private var pendingSceneQuestionAfterCamera: String? = null
     private var pendingReadTextTargetAfterCamera: SupportedLanguage? = null
     private var pendingLocationAction: (() -> Unit)? = null
@@ -134,6 +139,7 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         observePreferences()
         observeVoiceEvents()
+        observeWakePhraseEvents()
         observeSceneChanges()
         observeTtsReadinessForLanguages()
     }
@@ -163,7 +169,14 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
 
                 if (!welcomeTriggered && voiceCoordinator.state.value.isTtsReady) {
                     welcomeTriggered = true
-                    speakInitialWelcomeIfNeeded(prefs)
+                    handleStartupActivationOrWelcome(prefs)
+                }
+
+                if (prefs.wakePhraseModeEnabled &&
+                    PermissionChecker.snapshot(appContext).hasMicrophone &&
+                    !WakePhraseBridge.isServiceRunning.value
+                ) {
+                    runCatching { WakePhraseService.start(appContext) }
                 }
             }
         }
@@ -172,6 +185,9 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     private fun observeTtsReadinessForLanguages() {
         viewModelScope.launch {
             voiceCoordinator.state.collectLatest { vState ->
+                WakePhraseBridge.setVoiceSessionBusy(
+                    vState.phase != VoicePhase.IDLE && vState.phase != VoicePhase.ERROR
+                )
                 if (vState.isTtsReady) {
                     val reports = LanguageCatalog.languages.map { lang ->
                         LanguageCapabilityReport(
@@ -183,14 +199,22 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
 
                     if (!welcomeTriggered) {
                         welcomeTriggered = true
-                        speakInitialWelcomeIfNeeded(_settings.value)
+                        handleStartupActivationOrWelcome(_settings.value)
                     }
                 }
             }
         }
     }
 
-    private fun speakInitialWelcomeIfNeeded(prefs: ClearPathSettings) {
+    private fun handleStartupActivationOrWelcome(prefs: ClearPathSettings) {
+        refreshPermissions()
+        val hasMic = _permissions.value.hasMicrophone
+        if ((pendingExternalActivation || prefs.autoListenOnOpen) && hasMic) {
+            pendingExternalActivation = false
+            voiceCoordinator.startSession("ClearPath listening.")
+            return
+        }
+        pendingExternalActivation = false
         val welcome = if (!prefs.hasSpokenWelcome) {
             viewModelScope.launch { preferences.markWelcomeSpoken() }
             "Welcome to ClearPath, your voice-first assistive companion. Tap the large Listen button at the bottom of the screen to ask what is in front of you, read text, translate, get walking directions, or ask what settings are available."
@@ -204,7 +228,18 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             voiceCoordinator.events.collectLatest { event ->
                 when (event) {
-                    is VoiceEvent.FinalTranscript -> handleVoiceTranscript(event.text)
+                    is VoiceEvent.FinalTranscript -> {
+                        val wakeMatch = WakePhraseDetector.match(event.text)
+                        if (wakeMatch != null) {
+                            if (wakeMatch.trailingCommand != null) {
+                                handleVoiceTranscript(wakeMatch.trailingCommand)
+                            } else {
+                                voiceCoordinator.startSession("ClearPath active. Listening.")
+                            }
+                        } else {
+                            handleVoiceTranscript(event.text)
+                        }
+                    }
                     is VoiceEvent.RecognitionIssue -> {
                         if (!event.recoverable) {
                             _assistState.update { it.copy(errorMessage = event.message) }
@@ -212,6 +247,39 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
             }
+        }
+    }
+
+    private fun observeWakePhraseEvents() {
+        viewModelScope.launch {
+            WakePhraseBridge.activationEvents.collectLatest { trailingCommand ->
+                haptics.onListeningStart()
+                if (!trailingCommand.isNullOrBlank()) {
+                    handleVoiceTranscript(trailingCommand)
+                } else {
+                    voiceCoordinator.startSession("ClearPath active. Listening.")
+                }
+            }
+        }
+        viewModelScope.launch {
+            WakePhraseBridge.stoppedByNotification.collectLatest {
+                preferences.setWakePhraseModeEnabled(false)
+            }
+        }
+    }
+
+    fun onExternalAssistantTrigger() {
+        refreshPermissions()
+        if (!voiceCoordinator.state.value.isTtsReady) {
+            pendingExternalActivation = true
+            return
+        }
+        if (_permissions.value.hasMicrophone) {
+            voiceCoordinator.startSession("ClearPath active. Listening.")
+        } else {
+            pendingVoiceAfterMicPermission = true
+            _assistState.update { it.copy(pendingPermissionPrompt = ClearPathPermission.MICROPHONE) }
+            voiceCoordinator.speak(ClearPathPermission.MICROPHONE.rationale, autoListenAfter = false)
         }
     }
 
@@ -261,6 +329,10 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                     pendingVoiceAfterMicPermission = false
                     voiceCoordinator.startSession()
                 }
+                if (pendingWakePhraseAfterMicPermission) {
+                    pendingWakePhraseAfterMicPermission = false
+                    setWakePhraseModeEnabled(true)
+                }
             }
             ClearPathPermission.CAMERA -> {
                 val sceneQ = pendingSceneQuestionAfterCamera
@@ -277,6 +349,11 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                 val action = pendingLocationAction
                 pendingLocationAction = null
                 action?.invoke()
+            }
+            ClearPathPermission.NOTIFICATIONS -> {
+                if (_settings.value.wakePhraseModeEnabled && _permissions.value.hasMicrophone) {
+                    runCatching { WakePhraseService.start(appContext) }
+                }
             }
         }
     }
@@ -492,6 +569,8 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
             "Haptic vibration cues are ${if (s.hapticsEnabled) "on" else "off"}. " +
             "Prefer on-device AI is ${if (s.preferOnDeviceAi) "on" else "off"}. " +
             "Camera visual preview is ${if (s.showCameraPreview) "shown" else "hidden"}. " +
+            "Wake-phrase mode for ClearPath activate is ${if (s.wakePhraseModeEnabled) "on" else "off"}. " +
+            "Auto-listen on app open is ${if (s.autoListenOnOpen) "on" else "off"}. " +
             "Translation languages are $srcName to $tgtName. " +
             "Walking route mode is $mode. " +
             "You can tell me to change or toggle any of these."
@@ -509,6 +588,8 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                 "haptics" to JsonPrimitive(s.hapticsEnabled),
                 "prefer_on_device_ai" to JsonPrimitive(s.preferOnDeviceAi),
                 "show_camera_preview" to JsonPrimitive(s.showCameraPreview),
+                "wake_phrase_mode" to JsonPrimitive(s.wakePhraseModeEnabled),
+                "auto_listen_on_open" to JsonPrimitive(s.autoListenOnOpen),
                 "translation_source_language" to JsonPrimitive("$srcName (${s.translationSourceCode})"),
                 "translation_target_language" to JsonPrimitive("$tgtName (${s.translationTargetCode})"),
                 "routing_mode" to JsonPrimitive(_navigationState.value.providerMode.label),
@@ -582,6 +663,16 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                 val next = boolVal ?: if (wantsToggle) !current.showCameraPreview else parseBoolWord(strVal) ?: !current.showCameraPreview
                 preferences.setShowCameraPreview(next)
                 JsonObject(mapOf("status" to JsonPrimitive("updated"), "show_camera_preview" to JsonPrimitive(next)))
+            }
+            "wake_phrase_mode" -> {
+                val next = boolVal ?: if (wantsToggle) !current.wakePhraseModeEnabled else parseBoolWord(strVal) ?: !current.wakePhraseModeEnabled
+                setWakePhraseModeEnabled(next)
+                JsonObject(mapOf("status" to JsonPrimitive("updated"), "wake_phrase_mode" to JsonPrimitive(next)))
+            }
+            "auto_listen_on_open" -> {
+                val next = boolVal ?: if (wantsToggle) !current.autoListenOnOpen else parseBoolWord(strVal) ?: !current.autoListenOnOpen
+                setAutoListenOnOpen(next)
+                JsonObject(mapOf("status" to JsonPrimitive("updated"), "auto_listen_on_open" to JsonPrimitive(next)))
             }
             "translation_source_language" -> {
                 val lang = strVal?.let { LanguageCatalog.findByCodeOrName(it) }
@@ -669,6 +760,16 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                 val next = edit.booleanValue ?: !current.preferOnDeviceAi
                 setPreferOnDevice(next)
                 "Prefer on-device AI is now ${if (next) "on" else "off"}."
+            }
+            "wake_phrase_mode" -> {
+                val next = edit.booleanValue ?: !current.wakePhraseModeEnabled
+                setWakePhraseModeEnabled(next)
+                "Wake-phrase mode is now ${if (next) "on. Say ClearPath activate while the notification is active" else "off"}."
+            }
+            "auto_listen_on_open" -> {
+                val next = edit.booleanValue ?: !current.autoListenOnOpen
+                setAutoListenOnOpen(next)
+                "Auto-listen on app open is now ${if (next) "on" else "off"}."
             }
             "speech_rate" -> {
                 val rate = edit.floatValue ?: current.speechRate
@@ -1456,6 +1557,31 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     fun setPreferOnDevice(enabled: Boolean) {
         _assistState.update { it.copy(preferOnDeviceSingleTurn = enabled) }
         viewModelScope.launch { preferences.setPreferOnDeviceAi(enabled) }
+    }
+
+    fun setWakePhraseModeEnabled(enabled: Boolean) {
+        refreshPermissions()
+        if (enabled && !_permissions.value.hasMicrophone) {
+            pendingWakePhraseAfterMicPermission = true
+            _assistState.update { it.copy(pendingPermissionPrompt = ClearPathPermission.MICROPHONE) }
+            voiceCoordinator.speak(ClearPathPermission.MICROPHONE.rationale, autoListenAfter = false)
+            return
+        }
+        viewModelScope.launch {
+            preferences.setWakePhraseModeEnabled(enabled)
+            if (enabled) {
+                if (!_permissions.value.hasNotifications) {
+                    _assistState.update { it.copy(pendingPermissionPrompt = ClearPathPermission.NOTIFICATIONS) }
+                }
+                runCatching { WakePhraseService.start(appContext) }
+            } else {
+                WakePhraseService.stop(appContext)
+            }
+        }
+    }
+
+    fun setAutoListenOnOpen(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAutoListenOnOpen(enabled) }
     }
 
     fun setPreferredVoiceName(name: String) {
