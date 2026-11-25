@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 
 private const val TAG = "VoiceCoordinator"
 
@@ -45,7 +48,8 @@ enum class TtsSupportStatus {
 data class VoiceOption(
     val name: String,
     val localeTag: String,
-    val requiresNetwork: Boolean
+    val requiresNetwork: Boolean,
+    val displayLabel: String = localeTag
 )
 
 data class VoiceUiState(
@@ -80,10 +84,38 @@ class VoiceCoordinator(
     private var speechRecognizer: SpeechRecognizer? = null
     private var focusRequest: AudioFocusRequest? = null
 
-    private var currentListeningLocale: String = "en-NG"
+    private var currentListeningLocale: String = "en-US"
     private var continuousAutoListen: Boolean = true
     private var resumeListeningAfterUtterance: Boolean = false
     private var activeUtteranceId: String? = null
+    private var onActiveUtteranceDone: (() -> Unit)? = null
+    private var pendingShowcaseQueue: ArrayDeque<ShowcaseUtterance> = ArrayDeque()
+    private var pendingShowcaseFinishAutoListen: Boolean = false
+
+    private val _audioLevel = MutableStateFlow(0f)
+    val audioLevel: StateFlow<Float> = _audioLevel.asStateFlow()
+
+    private val _decibelBands = MutableStateFlow(List(DECIBEL_BAND_COUNT) { 0.06f })
+    val decibelBands: StateFlow<List<Float>> = _decibelBands.asStateFlow()
+
+    private var bandPhaseCounter = 0f
+
+    private fun publishAudioLevel(level: Float) {
+        val clamped = level.coerceIn(0f, 1f)
+        _audioLevel.value = clamped
+        if (clamped <= 0.02f) {
+            _decibelBands.value = List(DECIBEL_BAND_COUNT) { 0.06f }
+            return
+        }
+        bandPhaseCounter += 0.55f
+        val center = (DECIBEL_BAND_COUNT - 1) / 2f
+        _decibelBands.value = List(DECIBEL_BAND_COUNT) { idx ->
+            val distNorm = abs(idx - center) / center
+            val envelope = (1f - distNorm * 0.45f)
+            val wave = 0.55f + 0.45f * sin(bandPhaseCounter + idx * 0.6f + (PI.toFloat() * 0.25f))
+            (0.08f + clamped * envelope * wave * 0.92f).coerceIn(0.06f, 1f)
+        }
+    }
 
     private val _state = MutableStateFlow(
         VoiceUiState(
@@ -95,30 +127,54 @@ class VoiceCoordinator(
     private val _events = MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<VoiceEvent> = _events.asSharedFlow()
 
+    private data class ShowcaseUtterance(
+        val voiceName: String?,
+        val text: String
+    )
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             val engine = tts ?: return
-            val result = engine.setLanguage(Locale.forLanguageTag("en-NG"))
+            val result = engine.setLanguage(Locale.US)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                engine.setLanguage(Locale.US)
+                engine.setLanguage(Locale.UK)
             }
             engine.setSpeechRate(_state.value.speechRate)
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     mainHandler.post {
+                        publishAudioLevel(0.68f)
+                        haptics.onDecibelPulse(0.7f)
                         _state.update {
                             it.copy(
                                 phase = VoicePhase.SPEAKING,
-                                statusDetail = "Speaking response. Tap Listen to interrupt."
+                                statusDetail = "Speaking response."
                             )
+                        }
+                    }
+                }
+
+                override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                    mainHandler.post {
+                        if (utteranceId == activeUtteranceId) {
+                            val wordLen = (end - start).coerceIn(1, 10)
+                            val energy = (0.50f + (wordLen / 10f) * 0.48f).coerceIn(0.45f, 1f)
+                            publishAudioLevel(energy)
                         }
                     }
                 }
 
                 override fun onDone(utteranceId: String?) {
                     mainHandler.post {
-                        abandonAudioFocus()
                         if (utteranceId == activeUtteranceId) {
+                            if (pendingShowcaseQueue.isNotEmpty()) {
+                                playNextShowcaseItem()
+                                return@post
+                            }
+                            publishAudioLevel(0f)
+                            abandonAudioFocus()
+                            val completionCallback = onActiveUtteranceDone
+                            onActiveUtteranceDone = null
                             val shouldAutoListen = resumeListeningAfterUtterance &&
                                 _state.value.isSessionActive &&
                                 continuousAutoListen
@@ -133,6 +189,7 @@ class VoiceCoordinator(
                                     }
                                 )
                             }
+                            completionCallback?.invoke()
                             if (shouldAutoListen) {
                                 mainHandler.postDelayed({
                                     if (_state.value.isSessionActive &&
@@ -153,6 +210,9 @@ class VoiceCoordinator(
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
                     mainHandler.post {
+                        pendingShowcaseQueue.clear()
+                        onActiveUtteranceDone = null
+                        publishAudioLevel(0f)
                         abandonAudioFocus()
                         resumeListeningAfterUtterance = false
                         _state.update {
@@ -166,16 +226,33 @@ class VoiceCoordinator(
             })
 
             val voices = runCatching {
-                engine.voices?.filter { !it.isNetworkConnectionRequired || it.locale.language in setOf("en", "yo", "ig", "ha", "fr", "ar", "es") }
-                    ?.sortedBy { it.locale.displayName }
-                    ?.map {
-                        VoiceOption(
-                            name = it.name,
-                            localeTag = it.locale.toLanguageTag(),
-                            requiresNetwork = it.isNetworkConnectionRequired
-                        )
-                    }
-                    ?: emptyList()
+                val rawVoices = engine.voices
+                    ?.filter { !it.isNetworkConnectionRequired || it.locale.language in setOf("en", "yo", "ig", "ha", "fr", "ar", "es") }
+                    .orEmpty()
+                val sorted = rawVoices.sortedWith(
+                    compareBy<android.speech.tts.Voice>(
+                        { it.isNetworkConnectionRequired },
+                        {
+                            val tag = it.locale.toLanguageTag()
+                            when {
+                                tag.equals("en-US", ignoreCase = true) -> 0
+                                tag.equals("en-GB", ignoreCase = true) -> 1
+                                it.locale.language == "en" -> 2
+                                else -> 3
+                            }
+                        },
+                        { it.locale.displayName },
+                        { it.name }
+                    )
+                )
+                sorted.mapIndexed { idx, v ->
+                    VoiceOption(
+                        name = v.name,
+                        localeTag = v.locale.toLanguageTag(),
+                        requiresNetwork = v.isNetworkConnectionRequired,
+                        displayLabel = buildFriendlyVoiceLabel(v.locale, v.name, v.isNetworkConnectionRequired, idx)
+                    )
+                }
             }.getOrDefault(emptyList())
 
             _state.update {
@@ -202,7 +279,7 @@ class VoiceCoordinator(
         spokenLocaleTag: String,
         continuousConversation: Boolean
     ) {
-        currentListeningLocale = spokenLocaleTag.ifBlank { "en-NG" }
+        currentListeningLocale = spokenLocaleTag.ifBlank { "en-US" }
         continuousAutoListen = continuousConversation
         tts?.setSpeechRate(speechRate)
         if (preferredVoiceName != _state.value.selectedVoiceName) {
@@ -235,7 +312,10 @@ class VoiceCoordinator(
 
     fun endSession(farewellText: String? = "ClearPath session ended.") {
         mainHandler.post {
+            pendingShowcaseQueue.clear()
+            onActiveUtteranceDone = null
             resumeListeningAfterUtterance = false
+            publishAudioLevel(0f)
             stopListeningInternal()
             _state.update {
                 it.copy(
@@ -270,7 +350,10 @@ class VoiceCoordinator(
 
     fun interruptSpeakingAndListen() {
         mainHandler.post {
+            pendingShowcaseQueue.clear()
+            onActiveUtteranceDone = null
             resumeListeningAfterUtterance = false
+            publishAudioLevel(0f)
             tts?.stop()
             abandonAudioFocus()
             _state.update { it.copy(isSessionActive = true) }
@@ -280,7 +363,10 @@ class VoiceCoordinator(
 
     fun stopSpeaking() {
         mainHandler.post {
+            pendingShowcaseQueue.clear()
+            onActiveUtteranceDone = null
             resumeListeningAfterUtterance = false
+            publishAudioLevel(0f)
             tts?.stop()
             abandonAudioFocus()
             _state.update {
@@ -310,59 +396,142 @@ class VoiceCoordinator(
     fun speak(
         text: String,
         languageTag: String? = null,
-        autoListenAfter: Boolean = false
+        autoListenAfter: Boolean = false,
+        onFinished: (() -> Unit)? = null
     ) {
         val cleanText = text.trim()
         if (cleanText.isEmpty()) return
 
         mainHandler.post {
-            // Never speak over the user while actively listening
-            if (_state.value.phase == VoicePhase.LISTENING) {
-                stopListeningInternal()
-            }
+            pendingShowcaseQueue.clear()
+            speakInternal(
+                cleanText = cleanText,
+                languageTag = languageTag,
+                explicitVoiceName = null,
+                autoListenAfter = autoListenAfter,
+                onFinished = onFinished
+            )
+        }
+    }
 
+    fun speakWithSpecificVoice(
+        voiceName: String?,
+        text: String,
+        autoListenAfter: Boolean = false,
+        onFinished: (() -> Unit)? = null
+    ) {
+        val cleanText = text.trim()
+        if (cleanText.isEmpty()) return
+
+        mainHandler.post {
+            pendingShowcaseQueue.clear()
+            speakInternal(
+                cleanText = cleanText,
+                languageTag = null,
+                explicitVoiceName = voiceName,
+                autoListenAfter = autoListenAfter,
+                onFinished = onFinished
+            )
+        }
+    }
+
+    fun speakVoiceShowcase(
+        introText: String,
+        samples: List<Pair<String, String>>,
+        outroText: String,
+        autoListenAfter: Boolean = true,
+        onFinished: (() -> Unit)? = null
+    ) {
+        mainHandler.post {
+            pendingShowcaseQueue.clear()
+            pendingShowcaseFinishAutoListen = autoListenAfter
+            onActiveUtteranceDone = onFinished
+
+            samples.forEach { (voiceName, line) ->
+                pendingShowcaseQueue.addLast(ShowcaseUtterance(voiceName, line))
+            }
+            pendingShowcaseQueue.addLast(ShowcaseUtterance(_state.value.selectedVoiceName.ifBlank { null }, outroText))
+
+            speakInternal(
+                cleanText = introText,
+                languageTag = null,
+                explicitVoiceName = null,
+                autoListenAfter = false,
+                onFinished = onFinished
+            )
+        }
+    }
+
+    private fun playNextShowcaseItem() {
+        val next = pendingShowcaseQueue.removeFirstOrNull() ?: return
+        val isLast = pendingShowcaseQueue.isEmpty()
+        speakInternal(
+            cleanText = next.text,
+            languageTag = null,
+            explicitVoiceName = next.voiceName,
+            autoListenAfter = isLast && pendingShowcaseFinishAutoListen,
+            onFinished = if (isLast) onActiveUtteranceDone else null
+        )
+    }
+
+    private fun speakInternal(
+        cleanText: String,
+        languageTag: String?,
+        explicitVoiceName: String?,
+        autoListenAfter: Boolean,
+        onFinished: (() -> Unit)?
+    ) {
+        if (_state.value.phase == VoicePhase.LISTENING) {
+            stopListeningInternal()
+        }
+
+        _state.update {
+            it.copy(
+                lastSpokenText = cleanText,
+                phase = VoicePhase.SPEAKING,
+                statusDetail = "Speaking response.",
+                isSessionActive = it.isSessionActive || autoListenAfter
+            )
+        }
+
+        val engine = tts
+        if (engine == null || !_state.value.isTtsReady) {
+            publishAudioLevel(0f)
             _state.update {
                 it.copy(
-                    lastSpokenText = cleanText,
-                    phase = VoicePhase.SPEAKING,
-                    statusDetail = "Speaking response."
+                    phase = VoicePhase.IDLE,
+                    statusDetail = "Speech engine not ready; text shown on screen."
                 )
             }
-
-            val engine = tts
-            if (engine == null || !_state.value.isTtsReady) {
-                _state.update {
-                    it.copy(
-                        phase = VoicePhase.IDLE,
-                        statusDetail = "Speech engine not ready; text shown on screen."
-                    )
-                }
-                return@post
-            }
-
-            if (!languageTag.isNullOrBlank()) {
-                val targetLocale = Locale.forLanguageTag(languageTag)
-                val availability = engine.isLanguageAvailable(targetLocale)
-                if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                    engine.language = targetLocale
-                } else {
-                    engine.language = Locale.forLanguageTag("en-NG")
-                }
-            } else if (_state.value.selectedVoiceName.isBlank()) {
-                val ngStatus = engine.isLanguageAvailable(Locale.forLanguageTag("en-NG"))
-                engine.language = if (ngStatus >= TextToSpeech.LANG_AVAILABLE) {
-                    Locale.forLanguageTag("en-NG")
-                } else {
-                    Locale.US
-                }
-            }
-
-            requestAudioFocus()
-            val utteranceId = UUID.randomUUID().toString()
-            activeUtteranceId = utteranceId
-            resumeListeningAfterUtterance = autoListenAfter && _state.value.isSessionActive
-            engine.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+            onFinished?.invoke()
+            return
         }
+
+        if (!explicitVoiceName.isNullOrBlank()) {
+            val match = engine.voices?.firstOrNull { it.name == explicitVoiceName }
+            if (match != null) {
+                engine.voice = match
+            }
+        } else if (!languageTag.isNullOrBlank()) {
+            val targetLocale = Locale.forLanguageTag(languageTag)
+            val availability = engine.isLanguageAvailable(targetLocale)
+            if (availability >= TextToSpeech.LANG_AVAILABLE) {
+                engine.language = targetLocale
+            } else {
+                engine.language = Locale.US
+            }
+        } else if (_state.value.selectedVoiceName.isBlank()) {
+            engine.language = Locale.US
+        } else {
+            applyVoiceSelection(_state.value.selectedVoiceName)
+        }
+
+        requestAudioFocus()
+        val utteranceId = UUID.randomUUID().toString()
+        activeUtteranceId = utteranceId
+        onActiveUtteranceDone = onFinished
+        resumeListeningAfterUtterance = autoListenAfter && _state.value.isSessionActive
+        engine.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 
     fun repeatLastResponse() {
@@ -394,18 +563,22 @@ class VoiceCoordinator(
                 return@post
             }
 
+            pendingShowcaseQueue.clear()
+            onActiveUtteranceDone = null
             resumeListeningAfterUtterance = false
+            publishAudioLevel(0f)
             tts?.stop()
             abandonAudioFocus()
             stopListeningInternal()
 
-            currentListeningLocale = localeTag.ifBlank { "en-NG" }
+            currentListeningLocale = localeTag.ifBlank { "en-US" }
             val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
             speechRecognizer = recognizer
 
             recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     haptics.onListeningStart()
+                    publishAudioLevel(0.15f)
                     _state.update {
                         it.copy(
                             phase = VoicePhase.LISTENING,
@@ -417,12 +590,16 @@ class VoiceCoordinator(
 
                 override fun onBeginningOfSpeech() = Unit
 
-                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onRmsChanged(rmsdB: Float) {
+                    val normalized = ((rmsdB + 2f) / 12f).coerceIn(0.08f, 1f)
+                    publishAudioLevel(normalized)
+                }
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
                 override fun onEndOfSpeech() {
                     haptics.onListeningStop()
+                    publishAudioLevel(0f)
                     _state.update {
                         it.copy(
                             phase = VoicePhase.PROCESSING,
@@ -436,6 +613,7 @@ class VoiceCoordinator(
                         error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
                     val message = mapSpeechError(error)
                     Log.w(TAG, "SpeechRecognizer error=$error ($message)")
+                    publishAudioLevel(0f)
                     stopListeningInternal()
                     if (isSilenceOrNoMatch) {
                         _state.update {
@@ -462,6 +640,7 @@ class VoiceCoordinator(
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val transcript = matches?.firstOrNull()?.trim().orEmpty()
+                    publishAudioLevel(0f)
                     stopListeningInternal()
                     if (transcript.isNotEmpty()) {
                         _state.update {
@@ -607,6 +786,30 @@ class VoiceCoordinator(
     }
 
     companion object {
+        fun buildFriendlyVoiceLabel(
+            locale: Locale,
+            rawName: String,
+            requiresNetwork: Boolean,
+            index: Int
+        ): String {
+            val langCountry = buildString {
+                append(locale.getDisplayLanguage(Locale.ENGLISH).ifBlank { locale.language })
+                val country = locale.getDisplayCountry(Locale.ENGLISH)
+                if (country.isNotBlank()) {
+                    append(" (")
+                    append(country)
+                    append(")")
+                }
+            }
+            val tagSuffix = rawName.substringAfterLast("-x-", "").substringBefore("-").uppercase()
+            val mode = if (requiresNetwork) "Online" else "Offline"
+            return if (tagSuffix.isNotBlank() && tagSuffix.length <= 6) {
+                "$langCountry · Style $tagSuffix · $mode"
+            } else {
+                "$langCountry · Option ${index + 1} · $mode"
+            }
+        }
+
         fun mapSpeechError(code: Int): String = when (code) {
             SpeechRecognizer.ERROR_AUDIO -> "Microphone audio capture error."
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required."

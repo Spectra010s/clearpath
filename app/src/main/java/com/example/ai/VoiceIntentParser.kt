@@ -157,6 +157,25 @@ object VoiceIntentParser {
     }
 
     private fun isAssistantToolQuery(lower: String): Boolean {
+        val isLiveInterpreterOrScenery = lower.contains("listen and translate") ||
+            lower.contains("listen & translate") ||
+            lower.contains("listen and interpret") ||
+            lower.contains("stop translating") ||
+            lower.contains("exit interpreter") ||
+            lower.contains("scenery") ||
+            (lower.contains("summary") && (lower.contains("around") || lower.contains("location") || lower.contains("place")))
+        if (isLiveInterpreterOrScenery) {
+            return true
+        }
+        val isCameraShareOrFlip = lower.contains("live camera") ||
+            lower.contains("camera share") ||
+            lower.contains("flip camera") ||
+            lower.contains("switch camera") ||
+            ((lower.contains("share") || lower.contains("sharing")) && lower.contains("camera")) ||
+            ((lower.contains("turn on") || lower.contains("turn off") || lower.contains("start ") || lower.contains("stop ") || lower.contains("pause ")) && lower.contains("camera"))
+        if (isCameraShareOrFlip) {
+            return true
+        }
         val settingSubjects = listOf(
             "setting", "settings", "preference", "preferences",
             "scene watch", "haptic", "vibration", "vibrate",

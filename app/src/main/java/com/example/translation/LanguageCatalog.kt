@@ -35,8 +35,8 @@ object LanguageCatalog {
         code = "auto",
         displayName = "Auto-Detect",
         nativeName = "Auto-Detect",
-        sttLocaleTag = "en-NG",
-        ttsLocaleTag = "en-NG",
+        sttLocaleTag = "en-US",
+        ttsLocaleTag = "en-US",
         isNigerianPriority = false,
         sttNote = "Uses AI language identification for text/input"
     )
@@ -46,8 +46,8 @@ object LanguageCatalog {
             code = "en",
             displayName = "English",
             nativeName = "English",
-            sttLocaleTag = "en-NG",
-            ttsLocaleTag = "en-NG",
+            sttLocaleTag = "en-US",
+            ttsLocaleTag = "en-US",
             isNigerianPriority = true,
             sttNote = "Full speech input supported"
         ),

@@ -10,8 +10,6 @@ import com.example.settings.ClearPathSettings
 import com.example.ui.AssistScreen
 import com.example.ui.AssistUiState
 import com.example.ui.NavigationScreen
-import com.example.ui.TranslationScreen
-import com.example.ui.TranslationUiState
 import com.example.ui.theme.ClearPathTheme
 import com.example.voice.VoicePhase
 import com.example.voice.VoiceUiState
@@ -58,7 +56,7 @@ class ClearPathUiRobolectricTest {
     }
 
     @Test
-    fun navigationAndTranslationScreens_renderAccessibleControls() {
+    fun navigationScreen_rendersAccessibleControls() {
         composeRule.setContent {
             ClearPathTheme {
                 NavigationScreen(
@@ -87,28 +85,86 @@ class ClearPathUiRobolectricTest {
     }
 
     @Test
-    fun translationScreen_showsNigerianLanguageChips() {
+    fun onboardingScreen_rendersMusicEqualizerWithoutTapToSpeakAndBottomActions() {
         composeRule.setContent {
             ClearPathTheme {
-                TranslationScreen(
-                    translationState = TranslationUiState(),
+                com.example.ui.OnboardingScreen(
+                    onboardingState = com.example.onboarding.OnboardingUiState(
+                        isPreferencesLoaded = true,
+                        hasCompletedOnboarding = false
+                    ),
                     voiceState = VoiceUiState(),
-                    onSelectSource = {},
-                    onSelectTarget = {},
-                    onInputChanged = {},
-                    onTranslateText = {},
-                    onReadAndTranslateCamera = {},
-                    onRepeatOriginal = {},
-                    onRepeatTranslation = {},
-                    onPrimaryVoiceTap = {},
-                    onEndSession = {}
+                    liveState = com.example.voice.GeminiLiveState(isActive = true, isAiSpeaking = true),
+                    decibelBands = List(com.example.voice.DECIBEL_BAND_COUNT) { 0.5f },
+                    audioLevel = 0.6f,
+                    settings = ClearPathSettings(),
+                    permissions = PermissionSnapshot(hasMicrophone = true),
+                    onGrantAllPermissions = {},
+                    onGrantSinglePermission = {},
+                    onSwitchToManual = {},
+                    onSwitchToVoice = {},
+                    onSkip = {},
+                    onManualStepChange = {},
+                    onSelectAndSampleLiveVoice = {},
+                    onSelectAndSampleVoice = {},
+                    onSpeechRateChange = {},
+                    onContinuousConvoChange = {},
+                    onHapticsChange = {},
+                    onWakePhraseModeChange = {},
+                    onAutoListenOnOpenChange = {},
+                    onFinishManualSetup = {}
                 )
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("target_lang_yo").assertIsDisplayed()
-        composeRule.onNodeWithTag("target_lang_ig").assertIsDisplayed()
-        composeRule.onNodeWithTag("target_lang_ha").assertIsDisplayed()
-        composeRule.onNodeWithTag("target_lang_pcm").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_decibel_visualizer").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_manual_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_skip_button").assertIsDisplayed()
+        composeRule.onAllNodes(androidx.compose.ui.test.hasText("TAP TO SPEAK", ignoreCase = true))
+            .let { nodes ->
+                org.junit.Assert.assertEquals(0, nodes.fetchSemanticsNodes().size)
+            }
+    }
+
+    @Test
+    fun assistScreen_displaysLiveCameraShareControls() {
+        var shareTapped = false
+        var fullscreenTapped = false
+        var interpreterTapped = false
+        var sceneryTapped = false
+        composeRule.setContent {
+            ClearPathTheme {
+                AssistScreen(
+                    voiceState = VoiceUiState(),
+                    assistState = AssistUiState(),
+                    settings = ClearPathSettings(),
+                    permissions = PermissionSnapshot(hasCamera = true, hasMicrophone = true),
+                    isCameraReady = true,
+                    onBindCamera = { _, _ -> },
+                    onPrimaryVoiceTap = {},
+                    onEndSession = {},
+                    onRepeatLast = {},
+                    onDescribeScene = {},
+                    onReadText = {},
+                    onToggleSceneWatch = {},
+                    onTogglePreviewVisible = {},
+                    isLiveCameraShareActive = true,
+                    onToggleLiveCameraShare = { shareTapped = true },
+                    onOpenFullScreenCamera = { fullscreenTapped = true },
+                    onToggleInterpreterMode = { interpreterTapped = true },
+                    onScenerySummary = { sceneryTapped = true }
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("live_camera_share_button").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("flip_camera_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("fullscreen_camera_button").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("listen_translate_button").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("scenery_summary_button").assertIsDisplayed().performClick()
+        assertTrue(shareTapped)
+        assertTrue(fullscreenTapped)
+        assertTrue(interpreterTapped)
+        assertTrue(sceneryTapped)
     }
 }

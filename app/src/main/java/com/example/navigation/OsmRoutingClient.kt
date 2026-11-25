@@ -74,6 +74,50 @@ class OsmRoutingClient {
         }
     }
 
+    suspend fun fetchNearbyPlacesSummary(
+        near: GeoPoint,
+        radiusMeters: Int = 180
+    ): Result<List<PlaceCandidate>> = withContext(Dispatchers.IO) {
+        runCatching {
+            throttle()
+            val overpassQl = """
+                [out:json][timeout:10];
+                (
+                  node["name"]["amenity"](around:$radiusMeters,${near.latitude},${near.longitude});
+                  node["name"]["shop"](around:$radiusMeters,${near.latitude},${near.longitude});
+                  node["name"]["highway"="bus_stop"](around:$radiusMeters,${near.latitude},${near.longitude});
+                  way["name"]["building"](around:$radiusMeters,${near.latitude},${near.longitude});
+                );
+                out center 6;
+            """.trimIndent()
+            val encoded = URLEncoder.encode(overpassQl, "UTF-8")
+            val req = Request.Builder()
+                .url("https://overpass-api.de/api/interpreter?data=$encoded")
+                .get()
+                .build()
+            val body = executeForString(req)
+            val elements = JSONObject(body).optJSONArray("elements") ?: JSONArray()
+            val list = mutableListOf<PlaceCandidate>()
+            for (i in 0 until elements.length()) {
+                val el = elements.getJSONObject(i)
+                val lat = if (el.has("lat")) el.getDouble("lat") else el.optJSONObject("center")?.optDouble("lat") ?: continue
+                val lon = if (el.has("lon")) el.getDouble("lon") else el.optJSONObject("center")?.optDouble("lon") ?: continue
+                val tags = el.optJSONObject("tags") ?: continue
+                val name = tags.optString("name").trim()
+                if (name.isBlank()) continue
+                val kind = tags.optString("amenity")
+                    .ifBlank { tags.optString("shop") }
+                    .ifBlank { tags.optString("highway") }
+                    .ifBlank { "landmark" }
+                val point = GeoPoint(lat, lon)
+                val dist = NavigationEngine.haversineMeters(near, point)
+                list.add(PlaceCandidate(name = name, subtitle = kind, location = point, distanceMeters = dist))
+            }
+            list.distinctBy { it.name.lowercase() }
+                .sortedBy { it.distanceMeters ?: Double.MAX_VALUE }
+        }
+    }
+
     suspend fun fetchPedestrianRoute(
         origin: GeoPoint,
         destination: GeoPoint,

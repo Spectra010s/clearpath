@@ -8,8 +8,8 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Pure frame pre-processing and lightweight on-device scene-change gating
- * so ClearPath never continuously streams camera video to the cloud.
+ * Frame pre-processing, downscaling/rotation, and lightweight on-device scene-change gating
+ * supporting both single-shot analysis and user-activated Gemini Live continuous camera sharing.
  */
 object FrameProcessor {
 

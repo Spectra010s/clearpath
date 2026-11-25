@@ -58,6 +58,37 @@ class ClearPathAiRepository {
         )
     }
 
+    val liveAssistSystemInstruction = content {
+        text(
+            """
+            You are ClearPath, a proactive, real-time voice-first AI guide and companion for a blind or visually impaired person.
+            You are connected in live full-duplex audio: the user can speak or interrupt you naturally at any time—never tell them to tap a "speak" button.
+            Follow these guidance, interpreter, and camera-coaching behaviors strictly:
+            1. Active Physical Guide & Camera Framing Coach: Whenever you view the live camera stream or a snapshot and need a clearer view—for example, the phone is aimed too low at the floor, too high, slightly cut off, too close to a sign, or needs a slight shift—gently ask the user to adjust naturally (e.g., "Can you raise the device up a bit?", "Move slightly to your left", or "Could you step back a little so I can see the full sign?").
+            2. Live Camera Stream: When Live Camera Share is active, you receive continuous ~1 frame-per-second live video directly in this session—answer visual questions right away from what you see. If Live Camera Share is off and they ask what is ahead, call set_live_camera_share or describe_camera_scene.
+            3. Summary About Scenery ("give me a summary about my scenery" / "what is around me"): Call get_scenery_summary so you combine GPS address, compass direction, nearby mapped landmarks/places, AND camera vision into one helpful spoken overview.
+            4. Live Interpreter Mode ("ClearPath listen and translate" / "listen and interpret"): Immediately call set_live_interpreter_mode(enabled = true). While Interpreter Mode is ON, stay quiet while another person speaks nearby (in Chinese, Yoruba, Igbo, Hausa, French, Arabic, Spanish, or any language), then clearly interpret what they said into the user's target language (default English). Keep interpreting each turn until the user asks to stop translating, then call set_live_interpreter_mode(enabled = false).
+            5. Never invent exact distances in meters or feet from the camera; use qualitative phrases ("directly ahead", "to your left"). Never claim it is safe to cross a street without a cane, guide dog, or mobility check.
+            6. Keep responses concise (1 to 3 short spoken sentences) unless reading full text.
+            """.trimIndent()
+        )
+    }
+
+    val liveOnboardingSystemInstruction = content {
+        text(
+            """
+            You are ClearPath guiding a blind or visually impaired user through their quick first-time voice setup in real time.
+            Speak warmly, briefly, and naturally. The user can interrupt you anytime just by talking.
+            Guide them in 4 quick steps without rushing:
+            Step 1 (Consent): Microphone is already working. Ask if they consent to Camera access (to describe surroundings and read text) and Location access (for walking directions). If they agree, call request_consent_permissions. If they decline for now, respect it and move to Step 2.
+            Step 2 (Voice Selection): Ask if they like the voice you are speaking with right now, want to try another voice, or want to hear available voices. If they want to hear options, call list_live_voices or play_voice_samples. If they pick or ask to try a voice (like Aoede, Sulafat, Puck, Charon, Fenrir, Kore, Zephyr, Orus), call switch_live_voice right away so they hear you speak in that voice.
+            Step 3 (Preferences): Briefly ask if they want to keep vibration feedback on and if they want hands-free Wake-Phrase Mode ("ClearPath activate"). Use update_setting for any changes.
+            Step 4 (Finish): Once voice and preferences are confirmed, call complete_onboarding and welcome them into ClearPath.
+            If they ask for manual setup, call switch_to_manual_setup.
+            """.trimIndent()
+        )
+    }
+
     private val clearPathTools by lazy {
         val listAvailableSettingsTool = FunctionDeclaration(
             "list_available_settings",
@@ -99,7 +130,7 @@ class ClearPathAiRepository {
         )
         val listVoicesTool = FunctionDeclaration(
             "list_available_voices",
-            "List available Text-to-Speech voices on the user's phone and show which voice is active.",
+            "List available ClearPath HD live voices and device TTS voices.",
             emptyMap()
         )
         val describeCameraSceneTool = FunctionDeclaration(
@@ -155,11 +186,46 @@ class ClearPathAiRepository {
                 "target_language" to Schema.string("Target language code or name.")
             )
         )
+        val setLiveCameraShareTool = FunctionDeclaration(
+            "set_live_camera_share",
+            "Start or stop continuous real-time (~1 frame/sec) Gemini Live camera video streaming so the AI sees continuously as the user moves the phone.",
+            mapOf(
+                "enabled" to Schema.boolean("True to start continuous live camera streaming, false to pause/stop it."),
+                "full_screen" to Schema.boolean("Optional: true to open the full-screen Gemini Live camera view.")
+            ),
+            optionalParameters = listOf("full_screen")
+        )
+        val flipCameraLensTool = FunctionDeclaration(
+            "flip_camera_lens",
+            "Switch between the back camera (default for looking ahead) and the front selfie camera.",
+            emptyMap()
+        )
+        val setLiveInterpreterTool = FunctionDeclaration(
+            "set_live_interpreter_mode",
+            "Pause assistant chatter and switch ClearPath into Live Interpreter Mode to listen to nearby speakers in any language (such as Chinese, Yoruba, French, Spanish, Arabic) and translate aloud for the user.",
+            mapOf(
+                "enabled" to Schema.boolean("True to start listening and translating live conversation, false to exit interpreter mode."),
+                "target_language" to Schema.string("Optional language to translate into for the user (defaults to English).")
+            ),
+            optionalParameters = listOf("target_language")
+        )
+        val getScenerySummaryTool = FunctionDeclaration(
+            "get_scenery_summary",
+            "Gather a unified scenery summary combining GPS location, street address, compass heading, nearby OpenStreetMap landmarks/places, and camera surroundings.",
+            mapOf(
+                "focus_question" to Schema.string("Optional specific focus, e.g., 'Give me a summary about my scenery'.")
+            ),
+            optionalParameters = listOf("focus_question")
+        )
         Tool.functionDeclarations(
             listOf(
                 listAvailableSettingsTool,
                 updateSettingTool,
                 listVoicesTool,
+                setLiveInterpreterTool,
+                getScenerySummaryTool,
+                setLiveCameraShareTool,
+                flipCameraLensTool,
                 describeCameraSceneTool,
                 readCameraTextTool,
                 getCurrentLocationTool,
@@ -168,6 +234,75 @@ class ClearPathAiRepository {
                 getNavigationStatusTool,
                 stopNavigationTool,
                 translateTextTool
+            )
+        )
+    }
+
+    val assistToolsList: List<Tool> by lazy { listOf(clearPathTools) }
+
+    val onboardingToolsList: List<Tool> by lazy {
+        val requestConsentTool = FunctionDeclaration(
+            "request_consent_permissions",
+            "Trigger Android permission prompts for Camera, Location, and Notifications after user consents.",
+            emptyMap()
+        )
+        val listLiveVoicesTool = FunctionDeclaration(
+            "list_live_voices",
+            "List available HD live voices (Aoede, Sulafat, Puck, Charon, Kore, Fenrir, Zephyr, Orus, Leda, Umbriel) and show which is currently active.",
+            emptyMap()
+        )
+        val switchLiveVoiceTool = FunctionDeclaration(
+            "switch_live_voice",
+            "Switch ClearPath's live speaking voice to the requested voice name (or 'next' to try the next voice) so the user hears it live.",
+            mapOf(
+                "voice_name" to Schema.string("Voice name such as Aoede, Sulafat, Puck, Charon, Fenrir, Kore, Zephyr, Orus, or 'next'.")
+            )
+        )
+        val playVoiceSamplesTool = FunctionDeclaration(
+            "play_voice_samples",
+            "Play short spoken samples of the installed voices back-to-back.",
+            emptyMap()
+        )
+        val updateOnboardingSettingTool = FunctionDeclaration(
+            "update_setting",
+            "Update a setup preference such as haptics, continuous_conversation, wake_phrase_mode, auto_listen_on_open, or speech_rate.",
+            mapOf(
+                "setting_name" to Schema.enumeration(
+                    values = listOf(
+                        "speech_rate",
+                        "haptics",
+                        "continuous_conversation",
+                        "wake_phrase_mode",
+                        "auto_listen_on_open"
+                    ),
+                    description = "Preference key to update."
+                ),
+                "boolean_value" to Schema.boolean("Boolean true/false value."),
+                "number_value" to Schema.double("Numeric value for speech_rate (0.6 to 1.8).")
+            ),
+            optionalParameters = listOf("boolean_value", "number_value")
+        )
+        val completeOnboardingTool = FunctionDeclaration(
+            "complete_onboarding",
+            "Finish first-time setup and open the main ClearPath experience.",
+            emptyMap()
+        )
+        val switchManualTool = FunctionDeclaration(
+            "switch_to_manual_setup",
+            "Switch from voice setup to visual manual setup screens.",
+            emptyMap()
+        )
+        listOf(
+            Tool.functionDeclarations(
+                listOf(
+                    requestConsentTool,
+                    listLiveVoicesTool,
+                    switchLiveVoiceTool,
+                    playVoiceSamplesTool,
+                    updateOnboardingSettingTool,
+                    completeOnboardingTool,
+                    switchManualTool
+                )
             )
         )
     }

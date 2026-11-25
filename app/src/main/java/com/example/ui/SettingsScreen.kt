@@ -40,6 +40,8 @@ import com.example.ui.theme.ObsidianBorder
 import com.example.ui.theme.ObsidianSurface
 import com.example.ui.theme.RestrainedCyan
 import com.example.ui.theme.WarmAmber
+import com.example.voice.GeminiLiveState
+import com.example.voice.LiveVoiceCatalog
 import com.example.voice.VoiceUiState
 
 @Composable
@@ -57,12 +59,15 @@ fun SettingsScreen(
     onWakePhraseModeChange: (Boolean) -> Unit = {},
     onAutoListenOnOpenChange: (Boolean) -> Unit = {},
     onPreferOnDeviceChange: (Boolean) -> Unit,
+    onSelectLiveVoice: (String) -> Unit = {},
     onSelectVoice: (String) -> Unit,
     onRoutingModeChange: (RoutingProviderMode) -> Unit,
     onSaveRoutingConfig: (String, String) -> Unit,
+    onRerunOnboarding: () -> Unit = {},
     onPrimaryVoiceTap: () -> Unit = {},
     onEndSession: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    liveState: GeminiLiveState = GeminiLiveState()
 ) {
     var orsKeyDraft by remember(settings.orsApiKey) { mutableStateOf(settings.orsApiKey) }
     var customUrlDraft by remember(settings.customRoutingBaseUrl) { mutableStateOf(settings.customRoutingBaseUrl) }
@@ -199,6 +204,40 @@ fun SettingsScreen(
             }
         }
 
+        Card(
+            colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
+            border = BorderStroke(1.dp, ObsidianBorder)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "HD ClearPath Live Voice",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WarmAmber
+                )
+                LiveVoiceCatalog.voices.take(8).forEach { liveVoice ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = liveVoice.name.equals(settings.preferredLiveVoice, ignoreCase = true),
+                            onClick = { onSelectLiveVoice(liveVoice.name) },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = liveVoice.spokenLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = HighContrastText
+                        )
+                    }
+                }
+            }
+        }
+
         if (voiceState.availableVoices.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
@@ -209,7 +248,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "System Voice Selection",
+                        text = "Offline Fallback TTS Voice",
                         style = MaterialTheme.typography.titleMedium,
                         color = HighContrastText
                     )
@@ -225,7 +264,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "${voice.localeTag} (${voice.name.takeLast(18)})",
+                                text = voice.displayLabel,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = HighContrastText
                             )
@@ -323,12 +362,28 @@ fun SettingsScreen(
                 )
             }
         }
+
+        OutlinedButton(
+            onClick = onRerunOnboarding,
+            border = BorderStroke(1.dp, WarmAmber),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .testTag("rerun_onboarding_button")
+        ) {
+            Text(
+                text = "Re-run First-Time Voice Setup",
+                style = MaterialTheme.typography.labelLarge,
+                color = WarmAmber
+            )
+        }
         }
 
         PrimaryVoiceActionButton(
             voiceState = voiceState,
             onClick = onPrimaryVoiceTap,
-            onEndSession = onEndSession
+            onEndSession = onEndSession,
+            liveState = liveState
         )
     }
 }

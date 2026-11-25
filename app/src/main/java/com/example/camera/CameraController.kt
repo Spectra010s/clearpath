@@ -38,8 +38,23 @@ class CameraController(context: Context) {
     @Volatile
     private var sceneWatchActive: Boolean = false
 
+    @Volatile
+    private var liveStreamActive: Boolean = false
+
+    @Volatile
+    private var lastLiveFrameMs: Long = 0L
+
+    @Volatile
+    private var liveFrameConsumer: ((Bitmap) -> Unit)? = null
+
     private val _isCameraReady = MutableStateFlow(false)
     val isCameraReady: StateFlow<Boolean> = _isCameraReady.asStateFlow()
+
+    private val _isLiveStreaming = MutableStateFlow(false)
+    val isLiveStreaming: StateFlow<Boolean> = _isLiveStreaming.asStateFlow()
+
+    private val _useBackCamera = MutableStateFlow(true)
+    val useBackCamera: StateFlow<Boolean> = _useBackCamera.asStateFlow()
 
     private val _sceneChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val sceneChanges: SharedFlow<Unit> = _sceneChanges.asSharedFlow()
@@ -51,10 +66,27 @@ class CameraController(context: Context) {
         }
     }
 
+    fun setLiveFrameConsumer(consumer: ((Bitmap) -> Unit)?) {
+        liveFrameConsumer = consumer
+    }
+
+    fun setLiveStreamEnabled(enabled: Boolean) {
+        if (liveStreamActive != enabled) {
+            liveStreamActive = enabled
+            _isLiveStreaming.value = enabled
+            if (enabled) {
+                // Allow first frame immediately once enabled
+                lastLiveFrameMs = 0L
+            }
+        }
+    }
+
     fun bindCamera(
         lifecycleOwner: LifecycleOwner,
-        previewView: PreviewView?
+        previewView: PreviewView?,
+        useBackCamera: Boolean = _useBackCamera.value
     ) {
+        _useBackCamera.value = useBackCamera
         val providerFuture = ProcessCameraProvider.getInstance(appContext)
         providerFuture.addListener({
             try {
@@ -78,12 +110,26 @@ class CameraController(context: Context) {
                     .apply {
                         setAnalyzer(cameraExecutor) { proxy ->
                             try {
+                                val now = System.currentTimeMillis()
                                 if (sceneWatchActive) {
                                     val sig = FrameProcessor.sampleLumaSignature(proxy)
-                                    if (sig != null && sceneDetector.evaluate(sig, System.currentTimeMillis())) {
+                                    if (sig != null && sceneDetector.evaluate(sig, now)) {
                                         _sceneChanges.tryEmit(Unit)
                                     }
                                 }
+                                val consumer = liveFrameConsumer
+                                if (liveStreamActive && consumer != null && now - lastLiveFrameMs >= LIVE_FRAME_INTERVAL_MS) {
+                                    lastLiveFrameMs = now
+                                    val raw = proxy.toBitmap()
+                                    val processed = FrameProcessor.rotateAndDownscale(
+                                        raw,
+                                        proxy.imageInfo.rotationDegrees,
+                                        LIVE_FRAME_MAX_EDGE_PX
+                                    )
+                                    consumer(processed)
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Frame analysis step failed", e)
                             } finally {
                                 proxy.close()
                             }
@@ -91,10 +137,15 @@ class CameraController(context: Context) {
                     }
 
                 provider.unbindAll()
+                val selector = if (useBackCamera) {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                }
                 val useCases = listOfNotNull(preview, capture, analysis).toTypedArray()
                 provider.bindToLifecycle(
                     lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    selector,
                     *useCases
                 )
                 _isCameraReady.value = true
@@ -151,7 +202,15 @@ class CameraController(context: Context) {
     }
 
     fun release() {
+        liveStreamActive = false
+        _isLiveStreaming.value = false
+        liveFrameConsumer = null
         unbind()
         cameraExecutor.shutdown()
+    }
+
+    companion object {
+        private const val LIVE_FRAME_INTERVAL_MS = 1_000L
+        private const val LIVE_FRAME_MAX_EDGE_PX = 768
     }
 }

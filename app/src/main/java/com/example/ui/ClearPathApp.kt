@@ -21,11 +21,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -68,12 +66,18 @@ fun ClearPathApp(
     val lifecycleOwner = LocalLifecycleOwner.current
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val voiceState by viewModel.voiceState.collectAsStateWithLifecycle()
+    val liveState by viewModel.liveState.collectAsStateWithLifecycle()
+    val decibelBands by viewModel.decibelBands.collectAsStateWithLifecycle()
     val assistState by viewModel.assistState.collectAsStateWithLifecycle()
-    val translationState by viewModel.translationState.collectAsStateWithLifecycle()
     val navigationState by viewModel.navigationState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val onboardingState by viewModel.onboardingState.collectAsStateWithLifecycle()
+    val audioLevel by viewModel.audioLevel.collectAsStateWithLifecycle()
     val permissions by viewModel.permissions.collectAsStateWithLifecycle()
     val isCameraReady by viewModel.isCameraReady.collectAsStateWithLifecycle()
+    val isLiveCameraShareActive by viewModel.isLiveCameraShareActive.collectAsStateWithLifecycle()
+    val isFullScreenCameraView by viewModel.isFullScreenCameraView.collectAsStateWithLifecycle()
+    val useBackCamera by viewModel.useBackCamera.collectAsStateWithLifecycle()
 
     LaunchedEffect(assistantTriggerSequence) {
         if (assistantTriggerSequence > 0) {
@@ -81,10 +85,10 @@ fun ClearPathApp(
         }
     }
 
-    // Keep ImageCapture & SceneWatch bound regardless of which visual tab is currently open.
-    DisposableEffect(permissions.hasCamera, activeTab, settings.showCameraPreview, lifecycleOwner) {
-        if (permissions.hasCamera && (activeTab != ClearPathTab.ASSIST || !settings.showCameraPreview)) {
-            viewModel.bindCameraPreview(lifecycleOwner, null)
+    // Keep ImageCapture, SceneWatch, and Live 1 FPS streaming bound when Assist viewfinder or Fullscreen isn't showing PreviewView.
+    DisposableEffect(permissions.hasCamera, activeTab, settings.showCameraPreview, isFullScreenCameraView, useBackCamera, lifecycleOwner) {
+        if (permissions.hasCamera && !isFullScreenCameraView && (activeTab != ClearPathTab.ASSIST || !settings.showCameraPreview)) {
+            viewModel.bindCameraPreview(lifecycleOwner, null, useBackCamera)
         }
         onDispose { }
     }
@@ -178,6 +182,41 @@ fun ClearPathApp(
         )
     }
 
+    if (onboardingState.isPreferencesLoaded && !onboardingState.hasCompletedOnboarding) {
+        OnboardingScreen(
+            onboardingState = onboardingState,
+            voiceState = voiceState,
+            liveState = liveState,
+            decibelBands = decibelBands,
+            audioLevel = audioLevel,
+            settings = settings,
+            permissions = permissions,
+            onGrantAllPermissions = viewModel::requestAllOnboardingConsentPermissions,
+            onGrantSinglePermission = viewModel::requestSingleOnboardingPermission,
+            onSwitchToManual = viewModel::switchToManualSetup,
+            onSwitchToVoice = viewModel::switchToVoiceSetup,
+            onSkip = viewModel::skipOnboarding,
+            onManualStepChange = viewModel::setManualSetupStep,
+            onSelectAndSampleLiveVoice = viewModel::previewAndSelectLiveVoiceInManualSetup,
+            onSelectAndSampleVoice = viewModel::previewAndSelectVoiceInManualSetup,
+            onSpeechRateChange = viewModel::setSpeechRate,
+            onContinuousConvoChange = viewModel::setContinuousConversation,
+            onHapticsChange = viewModel::setHapticsEnabled,
+            onWakePhraseModeChange = viewModel::setWakePhraseModeEnabled,
+            onAutoListenOnOpenChange = viewModel::setAutoListenOnOpen,
+            onFinishManualSetup = { viewModel.completeOnboarding(keepLiveActive = false) }
+        )
+        return
+    }
+
+    if (!onboardingState.isPreferencesLoaded) {
+        androidx.compose.material3.Surface(
+            color = ObsidianBackground,
+            modifier = Modifier.fillMaxSize()
+        ) {}
+        return
+    }
+
     Scaffold(
         containerColor = ObsidianBackground,
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -260,7 +299,7 @@ fun ClearPathApp(
                         settings = settings,
                         permissions = permissions,
                         isCameraReady = isCameraReady,
-                        onBindCamera = viewModel::bindCameraPreview,
+                        onBindCamera = { owner, pv -> viewModel.bindCameraPreview(owner, pv, useBackCamera) },
                         onPrimaryVoiceTap = viewModel::onPrimaryVoiceButtonPressed,
                         onEndSession = viewModel::stopSpeakingOrSession,
                         onRepeatLast = viewModel::repeatLastSpoken,
@@ -273,7 +312,17 @@ fun ClearPathApp(
                         onReadText = { viewModel.readTextFromCamera() },
                         onToggleSceneWatch = viewModel::setSceneWatchEnabled,
                         onTogglePreviewVisible = viewModel::setShowCameraPreview,
-                        modifier = contentModifier
+                        modifier = contentModifier,
+                        liveState = liveState,
+                        decibelBands = decibelBands,
+                        audioLevel = audioLevel,
+                        isLiveCameraShareActive = isLiveCameraShareActive,
+                        useBackCamera = useBackCamera,
+                        onToggleLiveCameraShare = { viewModel.toggleLiveCameraShare(openFullScreenIfStarting = false) },
+                        onOpenFullScreenCamera = { viewModel.setFullScreenCameraView(true) },
+                        onFlipCamera = viewModel::flipCameraLens,
+                        onToggleInterpreterMode = viewModel::toggleLiveInterpreterMode,
+                        onScenerySummary = viewModel::requestScenerySummary
                     )
 
                     ClearPathTab.NAVIGATE -> NavigationScreen(
@@ -290,26 +339,8 @@ fun ClearPathApp(
                         onStopNavigation = viewModel::stopNavigation,
                         onPrimaryVoiceTap = viewModel::onPrimaryVoiceButtonPressed,
                         onEndSession = viewModel::stopSpeakingOrSession,
-                        modifier = contentModifier
-                    )
-
-                    ClearPathTab.TRANSLATE -> TranslationScreen(
-                        translationState = translationState,
-                        voiceState = voiceState,
-                        onSelectSource = viewModel::setTranslationSource,
-                        onSelectTarget = viewModel::setTranslationTarget,
-                        onInputChanged = viewModel::updateTranslationInput,
-                        onTranslateText = {
-                            viewModel.translateText(translationState.inputText)
-                        },
-                        onReadAndTranslateCamera = {
-                            viewModel.readTextFromCamera(translationState.targetLanguage)
-                        },
-                        onRepeatOriginal = viewModel::repeatTranslationOriginal,
-                        onRepeatTranslation = viewModel::repeatTranslationResult,
-                        onPrimaryVoiceTap = viewModel::onPrimaryVoiceButtonPressed,
-                        onEndSession = viewModel::stopSpeakingOrSession,
-                        modifier = contentModifier
+                        modifier = contentModifier,
+                        liveState = liveState
                     )
 
                     ClearPathTab.SETTINGS -> SettingsScreen(
@@ -330,22 +361,44 @@ fun ClearPathApp(
                         onWakePhraseModeChange = viewModel::setWakePhraseModeEnabled,
                         onAutoListenOnOpenChange = viewModel::setAutoListenOnOpen,
                         onPreferOnDeviceChange = viewModel::setPreferOnDevice,
+                        onSelectLiveVoice = viewModel::setPreferredLiveVoice,
                         onSelectVoice = viewModel::setPreferredVoiceName,
                         onRoutingModeChange = viewModel::setRoutingProviderMode,
                         onSaveRoutingConfig = viewModel::saveRoutingConfiguration,
+                        onRerunOnboarding = viewModel::rerunOnboardingFromSettings,
                         onPrimaryVoiceTap = viewModel::onPrimaryVoiceButtonPressed,
                         onEndSession = viewModel::stopSpeakingOrSession,
-                        modifier = contentModifier
+                        modifier = contentModifier,
+                        liveState = liveState
                     )
                 }
             }
         }
+    }
+
+    if (isFullScreenCameraView) {
+        GeminiLiveCameraOverlay(
+            liveState = liveState,
+            decibelBands = decibelBands,
+            audioLevel = audioLevel,
+            settings = settings,
+            permissions = permissions,
+            isLiveCameraShareActive = isLiveCameraShareActive,
+            useBackCamera = useBackCamera,
+            onBindCamera = { owner, pv -> viewModel.bindCameraPreview(owner, pv, useBackCamera) },
+            onFlipCamera = viewModel::flipCameraLens,
+            onToggleLiveCameraShare = { viewModel.toggleLiveCameraShare(openFullScreenIfStarting = false) },
+            onTogglePreviewVisible = viewModel::setShowCameraPreview,
+            onReadText = { viewModel.readTextFromCamera() },
+            onToggleInterpreterMode = viewModel::toggleLiveInterpreterMode,
+            onMinimize = { viewModel.setFullScreenCameraView(false) },
+            onEndLiveSession = viewModel::stopSpeakingOrSession
+        )
     }
 }
 
 private fun tabIcon(tab: ClearPathTab, selected: Boolean) = when (tab) {
     ClearPathTab.ASSIST -> if (selected) Icons.Filled.RecordVoiceOver else Icons.Outlined.RecordVoiceOver
     ClearPathTab.NAVIGATE -> if (selected) Icons.Filled.Navigation else Icons.Outlined.Navigation
-    ClearPathTab.TRANSLATE -> if (selected) Icons.Filled.Translate else Icons.Outlined.Translate
     ClearPathTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
 }

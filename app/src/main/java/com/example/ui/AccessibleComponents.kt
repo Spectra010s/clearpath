@@ -51,20 +51,41 @@ import com.example.ui.theme.ReadyEmeraldContainer
 import com.example.ui.theme.RestrainedCyan
 import com.example.ui.theme.RestrainedCyanContainer
 import com.example.ui.theme.WarmAmber
+import com.example.voice.GeminiLiveState
 import com.example.voice.VoicePhase
 import com.example.voice.VoiceUiState
 
 @Composable
 fun VoiceStatusBanner(
     voiceState: VoiceUiState,
+    liveState: GeminiLiveState = GeminiLiveState(),
     modifier: Modifier = Modifier
 ) {
-    val (label, containerColor, accentColor, icon) = when (voiceState.phase) {
-        VoicePhase.LISTENING -> Quadruple("LISTENING", ReadyEmeraldContainer, ReadyEmerald, Icons.Rounded.GraphicEq)
-        VoicePhase.PROCESSING -> Quadruple("PROCESSING", RestrainedCyanContainer, RestrainedCyan, Icons.Rounded.HourglassTop)
-        VoicePhase.SPEAKING -> Quadruple("SPEAKING", MaterialTheme.colorScheme.primaryContainer, WarmAmber, Icons.Rounded.VolumeUp)
-        VoicePhase.ERROR -> Quadruple("ATTENTION", AlertCoralContainer, AlertCoral, Icons.Rounded.Stop)
-        VoicePhase.IDLE -> Quadruple(
+    val (label, containerColor, accentColor, icon) = when {
+        liveState.isConnecting -> Quadruple("CONNECTING LIVE", RestrainedCyanContainer, RestrainedCyan, Icons.Rounded.HourglassTop)
+        liveState.isActive && liveState.isInterpreterMode -> Quadruple(
+            "LIVE · INTERPRETER (${liveState.interpreterTargetLanguage})",
+            RestrainedCyanContainer,
+            RestrainedCyan,
+            Icons.Rounded.GraphicEq
+        )
+        liveState.isActive && liveState.isAiSpeaking -> Quadruple(
+            "LIVE · SPEAKING (INTERRUPTIBLE)",
+            MaterialTheme.colorScheme.primaryContainer,
+            WarmAmber,
+            Icons.Rounded.VolumeUp
+        )
+        liveState.isActive -> Quadruple(
+            "LIVE · LISTENING",
+            ReadyEmeraldContainer,
+            ReadyEmerald,
+            Icons.Rounded.GraphicEq
+        )
+        voiceState.phase == VoicePhase.LISTENING -> Quadruple("LISTENING", ReadyEmeraldContainer, ReadyEmerald, Icons.Rounded.GraphicEq)
+        voiceState.phase == VoicePhase.PROCESSING -> Quadruple("PROCESSING", RestrainedCyanContainer, RestrainedCyan, Icons.Rounded.HourglassTop)
+        voiceState.phase == VoicePhase.SPEAKING -> Quadruple("SPEAKING", MaterialTheme.colorScheme.primaryContainer, WarmAmber, Icons.Rounded.VolumeUp)
+        voiceState.phase == VoicePhase.ERROR -> Quadruple("ATTENTION", AlertCoralContainer, AlertCoral, Icons.Rounded.Stop)
+        else -> Quadruple(
             if (voiceState.isSessionActive) "SESSION ACTIVE" else "READY",
             ObsidianSurfaceElevated,
             RestrainedCyan,
@@ -72,15 +93,18 @@ fun VoiceStatusBanner(
         )
     }
 
-    val liveText = buildString {
-        append(label)
-        append(": ")
-        if (voiceState.partialTranscript.isNotBlank()) {
-            append(voiceState.partialTranscript)
-        } else {
-            append(voiceState.statusDetail)
-        }
+    val detailText = when {
+        liveState.isConnecting -> "Connecting real-time ClearPath audio..."
+        liveState.isActive && liveState.isInterpreterMode ->
+            "Listening to interpret nearby speech into ${liveState.interpreterTargetLanguage}. Say 'stop translating' anytime."
+        liveState.isActive && liveState.inputTranscript.isNotBlank() -> "You: ${liveState.inputTranscript}"
+        liveState.isActive && liveState.isAiSpeaking -> "Speak anytime to interrupt (${liveState.currentVoiceName})"
+        liveState.isActive -> "Speak naturally · ${liveState.currentVoiceName}"
+        voiceState.partialTranscript.isNotBlank() -> voiceState.partialTranscript
+        else -> voiceState.statusDetail
     }
+
+    val liveText = "$label: $detailText"
 
     Surface(
         modifier = modifier
@@ -112,7 +136,7 @@ fun VoiceStatusBanner(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = voiceState.partialTranscript.ifBlank { voiceState.statusDetail },
+                    text = detailText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = HighContrastText
                 )
@@ -126,34 +150,49 @@ fun PrimaryVoiceActionButton(
     voiceState: VoiceUiState,
     onClick: () -> Unit,
     onEndSession: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    liveState: GeminiLiveState = GeminiLiveState()
 ) {
     val haptic = LocalHapticFeedback.current
-    val (headline, subtext, containerColor, contentColor, icon) = when (voiceState.phase) {
-        VoicePhase.LISTENING -> Quintuple(
+    val (headline, subtext, containerColor, contentColor, icon) = when {
+        liveState.isConnecting -> Quintuple(
+            "Connecting Live Voice...",
+            "Tap to cancel",
+            RestrainedCyan,
+            OnWarmAmber,
+            Icons.Rounded.HourglassTop
+        )
+        liveState.isActive -> Quintuple(
+            "ClearPath Live Active — Tap to Pause",
+            "Full-duplex hands-free mode · Speak anytime to interrupt",
+            ReadyEmerald,
+            OnWarmAmber,
+            Icons.Rounded.GraphicEq
+        )
+        voiceState.phase == VoicePhase.LISTENING -> Quintuple(
             "Listening — Tap to Stop",
             "Speak your question or command naturally",
             ReadyEmerald,
             OnWarmAmber,
             Icons.Rounded.Stop
         )
-        VoicePhase.SPEAKING -> Quintuple(
+        voiceState.phase == VoicePhase.SPEAKING -> Quintuple(
             "Tap to Interrupt & Speak",
             "Stops current voice playback immediately",
             WarmAmber,
             OnWarmAmber,
             Icons.Rounded.Mic
         )
-        VoicePhase.PROCESSING -> Quintuple(
+        voiceState.phase == VoicePhase.PROCESSING -> Quintuple(
             "Processing — Tap to Re-listen",
             "Working on your request",
             RestrainedCyan,
             OnWarmAmber,
             Icons.Rounded.HourglassTop
         )
-        VoicePhase.IDLE, VoicePhase.ERROR -> Quintuple(
-            "Listen",
-            "Tap to speak: Ask what is ahead, read text, translate, or navigate",
+        else -> Quintuple(
+            "Listen Live",
+            "Tap to start hands-free duplex conversation",
             WarmAmber,
             OnWarmAmber,
             Icons.Rounded.Mic
@@ -208,7 +247,7 @@ fun PrimaryVoiceActionButton(
             }
         }
 
-        if (voiceState.isSessionActive || voiceState.phase == VoicePhase.SPEAKING) {
+        if (liveState.isActive || voiceState.isSessionActive || voiceState.phase == VoicePhase.SPEAKING) {
             OutlinedButton(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)

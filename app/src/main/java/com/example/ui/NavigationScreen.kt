@@ -53,6 +53,7 @@ import com.example.ui.theme.OnWarmAmber
 import com.example.ui.theme.ReadyEmerald
 import com.example.ui.theme.RestrainedCyan
 import com.example.ui.theme.WarmAmber
+import com.example.voice.GeminiLiveState
 import com.example.voice.VoiceUiState
 
 @Composable
@@ -70,7 +71,8 @@ fun NavigationScreen(
     onStopNavigation: () -> Unit,
     onPrimaryVoiceTap: () -> Unit,
     onEndSession: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    liveState: GeminiLiveState = GeminiLiveState()
 ) {
     LaunchedEffect(Unit) {
         onStartCompass()
@@ -84,7 +86,7 @@ fun NavigationScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        VoiceStatusBanner(voiceState = voiceState)
+        VoiceStatusBanner(voiceState = voiceState, liveState = liveState)
 
         Column(
             modifier = Modifier
@@ -433,7 +435,8 @@ fun NavigationScreen(
         PrimaryVoiceActionButton(
             voiceState = voiceState,
             onClick = onPrimaryVoiceTap,
-            onEndSession = onEndSession
+            onEndSession = onEndSession,
+            liveState = liveState
         )
     }
 }

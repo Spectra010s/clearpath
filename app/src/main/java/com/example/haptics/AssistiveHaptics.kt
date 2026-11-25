@@ -23,6 +23,9 @@ class AssistiveHaptics(context: Context) {
     @Volatile
     var enabled: Boolean = true
 
+    @Volatile
+    private var lastPulseAtMs: Long = 0L
+
     fun onListeningStart() {
         vibratePattern(longArrayOf(0, 45), intArrayOf(0, 180))
     }
@@ -33,6 +36,14 @@ class AssistiveHaptics(context: Context) {
 
     fun onProcessingTick() {
         vibratePattern(longArrayOf(0, 22), intArrayOf(0, 90))
+    }
+
+    fun onDecibelPulse(intensity: Float = 0.6f) {
+        val now = System.currentTimeMillis()
+        if (now - lastPulseAtMs < 240L) return
+        lastPulseAtMs = now
+        val amp = (55 + (intensity.coerceIn(0f, 1f) * 115f)).toInt().coerceIn(50, 180)
+        vibratePattern(longArrayOf(0, 18), intArrayOf(0, amp))
     }
 
     fun onAnswerReady() {

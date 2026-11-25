@@ -206,4 +206,74 @@ class ClearPathUnitTests {
         val nonWake = WakePhraseDetector.match("Take me to the nearest pharmacy")
         assertNull(nonWake)
     }
+
+    @Test
+    fun onboardingVoiceParser_handlesConsentVoicesAndPreferences() {
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.Affirmative,
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "Yes, I consent",
+                com.example.onboarding.VoiceSetupStep.WELCOME_AND_CONSENT
+            )
+        )
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.NextOrAnother,
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "Give me another voice",
+                com.example.onboarding.VoiceSetupStep.CHOOSE_VOICE
+            )
+        )
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.ListAndPlayVoices,
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "List available voices and play each",
+                com.example.onboarding.VoiceSetupStep.CHOOSE_VOICE
+            )
+        )
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.SelectVoiceNumber(3),
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "Voice 3",
+                com.example.onboarding.VoiceSetupStep.CHOOSE_VOICE
+            )
+        )
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.DisableHaptics,
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "Turn off vibration",
+                com.example.onboarding.VoiceSetupStep.PREFERENCES_SPEED_AND_HAPTICS
+            )
+        )
+        assertEquals(
+            com.example.onboarding.OnboardingVoiceReply.SwitchToManual,
+            com.example.onboarding.OnboardingVoiceParser.parse(
+                "Manual setup",
+                com.example.onboarding.VoiceSetupStep.CHOOSE_VOICE
+            )
+        )
+    }
+
+    @Test
+    fun voiceIntentParser_routesLiveCameraShareCommandsToAssistantTools() {
+        val startShare = VoiceIntentParser.parse("Share my camera", hasPriorSceneContext = false)
+        assertTrue(startShare is ClearPathIntent.AssistantToolRequest)
+
+        val stopShare = VoiceIntentParser.parse("Stop sharing camera", hasPriorSceneContext = true)
+        assertTrue(stopShare is ClearPathIntent.AssistantToolRequest)
+
+        val flipCam = VoiceIntentParser.parse("Flip camera to front", hasPriorSceneContext = true)
+        assertTrue(flipCam is ClearPathIntent.AssistantToolRequest)
+    }
+
+    @Test
+    fun voiceIntentParser_routesInterpreterAndSceneryCommandsToAssistantTools() {
+        val listenTranslate = VoiceIntentParser.parse("ClearPath listen and translate", hasPriorSceneContext = false)
+        assertTrue(listenTranslate is ClearPathIntent.AssistantToolRequest)
+
+        val stopTranslate = VoiceIntentParser.parse("Stop translating", hasPriorSceneContext = true)
+        assertTrue(stopTranslate is ClearPathIntent.AssistantToolRequest)
+
+        val scenery = VoiceIntentParser.parse("Give me a summary about my scenery", hasPriorSceneContext = true)
+        assertTrue(scenery is ClearPathIntent.AssistantToolRequest)
+    }
 }

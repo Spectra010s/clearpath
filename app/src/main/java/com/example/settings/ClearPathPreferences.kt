@@ -19,7 +19,8 @@ data class ClearPathSettings(
     val speechRate: Float = 1.0f,
     val speechPitch: Float = 1.0f,
     val preferredVoiceName: String = "",
-    val spokenLanguageTag: String = "en-NG",
+    val preferredLiveVoice: String = "Aoede",
+    val spokenLanguageTag: String = "en-US",
     val translationSourceCode: String = "auto",
     val translationTargetCode: String = "en",
     val continuousConversation: Boolean = true,
@@ -32,7 +33,8 @@ data class ClearPathSettings(
     val routingProviderMode: String = "OPEN_ROUTE_SERVICE",
     val orsApiKey: String = "",
     val customRoutingBaseUrl: String = "",
-    val hasSpokenWelcome: Boolean = false
+    val hasSpokenWelcome: Boolean = false,
+    val hasCompletedOnboarding: Boolean = false
 )
 
 class ClearPathPreferencesRepository(private val context: Context) {
@@ -41,6 +43,7 @@ class ClearPathPreferencesRepository(private val context: Context) {
         val SPEECH_RATE = floatPreferencesKey("speech_rate")
         val SPEECH_PITCH = floatPreferencesKey("speech_pitch")
         val PREFERRED_VOICE = stringPreferencesKey("preferred_voice")
+        val PREFERRED_LIVE_VOICE = stringPreferencesKey("preferred_live_voice")
         val SPOKEN_LANG = stringPreferencesKey("spoken_lang")
         val TRANS_SOURCE = stringPreferencesKey("trans_source")
         val TRANS_TARGET = stringPreferencesKey("trans_target")
@@ -55,6 +58,7 @@ class ClearPathPreferencesRepository(private val context: Context) {
         val ORS_API_KEY = stringPreferencesKey("ors_api_key")
         val CUSTOM_ROUTING_URL = stringPreferencesKey("custom_routing_url")
         val HAS_WELCOME = booleanPreferencesKey("has_welcome")
+        val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
     }
 
     val settings: Flow<ClearPathSettings> = context.clearPathDataStore.data.map { prefs ->
@@ -62,7 +66,8 @@ class ClearPathPreferencesRepository(private val context: Context) {
             speechRate = (prefs[Keys.SPEECH_RATE] ?: 1.0f).coerceIn(0.6f, 1.8f),
             speechPitch = (prefs[Keys.SPEECH_PITCH] ?: 1.0f).coerceIn(0.75f, 1.35f),
             preferredVoiceName = prefs[Keys.PREFERRED_VOICE] ?: "",
-            spokenLanguageTag = prefs[Keys.SPOKEN_LANG] ?: "en-NG",
+            preferredLiveVoice = prefs[Keys.PREFERRED_LIVE_VOICE] ?: "Aoede",
+            spokenLanguageTag = prefs[Keys.SPOKEN_LANG] ?: "en-US",
             translationSourceCode = prefs[Keys.TRANS_SOURCE] ?: "auto",
             translationTargetCode = prefs[Keys.TRANS_TARGET] ?: "en",
             continuousConversation = prefs[Keys.CONTINUOUS_CONVO] ?: true,
@@ -75,7 +80,8 @@ class ClearPathPreferencesRepository(private val context: Context) {
             routingProviderMode = prefs[Keys.ROUTING_MODE] ?: "OPEN_ROUTE_SERVICE",
             orsApiKey = prefs[Keys.ORS_API_KEY] ?: "",
             customRoutingBaseUrl = prefs[Keys.CUSTOM_ROUTING_URL] ?: "",
-            hasSpokenWelcome = prefs[Keys.HAS_WELCOME] ?: false
+            hasSpokenWelcome = prefs[Keys.HAS_WELCOME] ?: false,
+            hasCompletedOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false
         )
     }
 
@@ -85,6 +91,10 @@ class ClearPathPreferencesRepository(private val context: Context) {
 
     suspend fun setPreferredVoice(name: String) {
         context.clearPathDataStore.edit { it[Keys.PREFERRED_VOICE] = name }
+    }
+
+    suspend fun setPreferredLiveVoice(name: String) {
+        context.clearPathDataStore.edit { it[Keys.PREFERRED_LIVE_VOICE] = name }
     }
 
     suspend fun setSpokenLanguageTag(tag: String) {
@@ -139,5 +149,9 @@ class ClearPathPreferencesRepository(private val context: Context) {
 
     suspend fun markWelcomeSpoken() {
         context.clearPathDataStore.edit { it[Keys.HAS_WELCOME] = true }
+    }
+
+    suspend fun setHasCompletedOnboarding(completed: Boolean) {
+        context.clearPathDataStore.edit { it[Keys.HAS_COMPLETED_ONBOARDING] = completed }
     }
 }
