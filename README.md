@@ -90,5 +90,6 @@ To sign CI builds with your own release keystore, add these **Repository Secrets
   - macOS/Linux: `base64 -w 0 my-upload-key.jks` (macOS: `base64 -i my-upload-key.jks | tr -d '\n'`)
 - `STORE_PASSWORD`: Your keystore password
 - `KEY_PASSWORD`: Your key password
+- `GOOGLE_SERVICES_JSON_BASE64` *(optional if `app/google-services.json` is not committed in GitHub)*: Base64-encoded contents of `app/google-services.json`
 
-If those secrets are not configured yet, the workflow generates an ephemeral CI keystore (`alias=upload`) so builds still succeed for testing.
+If signing keystore secrets are not configured yet, the workflow generates an ephemeral CI keystore (`alias=upload`) so builds still succeed for testing. If your GitHub export omits `app/google-services.json`, either add the file to `app/google-services.json` in your repo or set `GOOGLE_SERVICES_JSON_BASE64`.
