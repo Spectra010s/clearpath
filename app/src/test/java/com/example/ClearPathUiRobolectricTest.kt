@@ -1,9 +1,17 @@
 package com.example
 
+import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.example.onboarding.VoiceSetupStep
+import com.example.permissions.ClearPathPermission
+import com.example.ui.PermissionRationaleDialog
+import com.example.ui.ClearPathViewModel
 import com.example.navigation.NavigationUiState
 import com.example.permissions.PermissionSnapshot
 import com.example.settings.ClearPathSettings
@@ -13,6 +21,10 @@ import com.example.ui.NavigationScreen
 import com.example.ui.theme.ClearPathTheme
 import com.example.voice.VoicePhase
 import com.example.voice.VoiceUiState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -166,5 +178,123 @@ class ClearPathUiRobolectricTest {
         assertTrue(fullscreenTapped)
         assertTrue(interpreterTapped)
         assertTrue(sceneryTapped)
+    }
+
+    @Test
+    fun permissionWaitingDialog_disablesRepeatConfirmAndAnnouncesStatus() {
+        composeRule.setContent {
+            ClearPathTheme {
+                PermissionRationaleDialog(
+                    permission = ClearPathPermission.CAMERA,
+                    isWaiting = true,
+                    onConfirm = {},
+                    onDismiss = {}
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("confirm_permission_button").assertIsNotEnabled()
+        composeRule.onNodeWithText("Waiting for Android permission result...").assertIsDisplayed()
+    }
+
+    @Test
+    fun permissionDismiss_clearsWaitingAndDoesNotAdvanceOnboarding() {
+        val viewModel = ClearPathViewModel(
+            ApplicationProvider.getApplicationContext<Application>()
+        )
+
+        viewModel.requestAllOnboardingConsentPermissions()
+        val permission = viewModel.assistState.value.pendingPermissionPrompt
+        assertNotNull(permission)
+        assertTrue(viewModel.beginPermissionRequest(permission!!))
+        assertTrue(viewModel.assistState.value.isWaitingForPermissionResult)
+
+        viewModel.dismissPermissionPrompt()
+
+        assertFalse(viewModel.assistState.value.isWaitingForPermissionResult)
+        assertNull(viewModel.assistState.value.pendingPermissionPrompt)
+        assertFalse(viewModel.onboardingState.value.awaitingPermissionBatch)
+        assertEquals(
+            VoiceSetupStep.WELCOME_AND_CONSENT,
+            viewModel.onboardingState.value.voiceStep
+        )
+    }
+
+    @Test
+    fun permissionConfirm_ignoresRepeatTapWhileWaiting() {
+        val viewModel = ClearPathViewModel(
+            ApplicationProvider.getApplicationContext<Application>()
+        )
+
+        viewModel.requestAllOnboardingConsentPermissions()
+        val permission = viewModel.assistState.value.pendingPermissionPrompt!!
+
+        assertTrue(viewModel.beginPermissionRequest(permission))
+        assertFalse(viewModel.beginPermissionRequest(permission))
+    }
+
+    @Test
+    fun permissionGrantedResultAdvancesToNextPermission() {
+        val viewModel = ClearPathViewModel(
+            ApplicationProvider.getApplicationContext<Application>()
+        )
+
+        viewModel.requestAllOnboardingConsentPermissions()
+        val first = viewModel.assistState.value.pendingPermissionPrompt!!
+        assertTrue(viewModel.beginPermissionRequest(first))
+
+        viewModel.onPermissionResult(first, granted = true)
+
+        assertFalse(viewModel.assistState.value.isWaitingForPermissionResult)
+        assertTrue(viewModel.onboardingState.value.awaitingPermissionBatch)
+        assertNotNull(viewModel.assistState.value.pendingPermissionPrompt)
+        assertEquals(
+            VoiceSetupStep.WELCOME_AND_CONSENT,
+            viewModel.onboardingState.value.voiceStep
+        )
+    }
+
+    @Test
+    fun permissionDenialAdvancesToNextPermissionNotOnboardingStep() {
+        val viewModel = ClearPathViewModel(
+            ApplicationProvider.getApplicationContext<Application>()
+        )
+
+        viewModel.requestAllOnboardingConsentPermissions()
+        val first = viewModel.assistState.value.pendingPermissionPrompt!!
+        assertTrue(viewModel.beginPermissionRequest(first))
+
+        viewModel.onPermissionResult(first, granted = false)
+
+        assertFalse(viewModel.assistState.value.isWaitingForPermissionResult)
+        assertTrue(viewModel.onboardingState.value.awaitingPermissionBatch)
+        assertNotNull(viewModel.assistState.value.pendingPermissionPrompt)
+        assertEquals(
+            VoiceSetupStep.WELCOME_AND_CONSENT,
+            viewModel.onboardingState.value.voiceStep
+        )
+    }
+
+    @Test
+    fun permissionDenialContinuesRemainingBatchAndDoesNotDeadEnd() {
+        val viewModel = ClearPathViewModel(
+            ApplicationProvider.getApplicationContext<Application>()
+        )
+
+        viewModel.requestAllOnboardingConsentPermissions()
+
+        while (viewModel.onboardingState.value.awaitingPermissionBatch) {
+            val permission = viewModel.assistState.value.pendingPermissionPrompt ?: break
+            viewModel.beginPermissionRequest(permission)
+            viewModel.onPermissionResult(permission, granted = false)
+        }
+
+        assertFalse(viewModel.onboardingState.value.awaitingPermissionBatch)
+        assertNull(viewModel.assistState.value.pendingPermissionPrompt)
+        assertEquals(
+            VoiceSetupStep.CHOOSE_VOICE,
+            viewModel.onboardingState.value.voiceStep
+        )
     }
 }
