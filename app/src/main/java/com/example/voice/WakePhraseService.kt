@@ -70,6 +70,9 @@ class WakePhraseService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
+                // Must be the first thing we do: Android kills the app if
+                // startForeground() isn't called promptly after startForegroundService().
+                startForegroundWithNotification()
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
                     PackageManager.PERMISSION_GRANTED
                 ) {
@@ -77,7 +80,6 @@ class WakePhraseService : Service() {
                     stopSelfCleanly()
                     return START_NOT_STICKY
                 }
-                startForegroundWithNotification()
                 WakePhraseBridge.setServiceRunning(true)
                 if (!WakePhraseBridge.isVoiceSessionBusy.value) {
                     scheduleNextListen(250L)
