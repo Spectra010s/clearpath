@@ -290,6 +290,7 @@ fun SectionHeading(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun PermissionRationaleDialog(
     permission: ClearPathPermission,
+    isWaiting: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -303,20 +304,34 @@ fun PermissionRationaleDialog(
             )
         },
         text = {
-            Text(
-                text = permission.rationale,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = permission.rationale,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (isWaiting) {
+                    Text(
+                        text = "Waiting for Android permission result...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = HighContrastText,
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = "Waiting for Android permission result"
+                        }
+                    )
+                }
+            }
         },
         confirmButton = {
             Button(
                 onClick = onConfirm,
+                enabled = !isWaiting,
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("confirm_permission_button")
             ) {
-                Text("Allow ${permission.title.substringBefore(" ")}")
+                Text(if (isWaiting) "Waiting..." else "Allow ${permission.title.substringBefore(" ")}")
             }
         },
         dismissButton = {

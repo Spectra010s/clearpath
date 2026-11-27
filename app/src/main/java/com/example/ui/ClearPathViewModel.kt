@@ -101,7 +101,8 @@ data class AssistUiState(
     val hasSceneContext: Boolean = false,
     val preferOnDeviceSingleTurn: Boolean = false,
     val errorMessage: String? = null,
-    val pendingPermissionPrompt: ClearPathPermission? = null
+    val pendingPermissionPrompt: ClearPathPermission? = null,
+    val isWaitingForPermissionResult: Boolean = false
 )
 
 class ClearPathViewModel(application: Application) : AndroidViewModel(application) {
@@ -185,6 +186,7 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     private var pendingReadTextTargetAfterCamera: SupportedLanguage? = null
     private var pendingLocationAction: (() -> Unit)? = null
     private val pendingOnboardingPermissionQueue = ArrayDeque<ClearPathPermission>()
+    private var waitingPermissionRequest: ClearPathPermission? = null
     private var offRouteConsecutiveCount = 0
     private var lastAnnouncedStepIndex = -1
     private var isRerouting = false
@@ -446,10 +448,27 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onPermissionResult(permission: ClearPathPermission, granted: Boolean) {
+        waitingPermissionRequest = null
         refreshPermissions()
-        _assistState.update { it.copy(pendingPermissionPrompt = null) }
+        _assistState.update {
+            it.copy(
+                pendingPermissionPrompt = null,
+                isWaitingForPermissionResult = false
+            )
+        }
 
         if (_onboardingState.value.awaitingPermissionBatch) {
+            if (!granted) {
+                val msg = "${permission.title} was denied. Remaining setup permissions will still be offered."
+                _assistState.update { it.copy(errorMessage = msg) }
+                voiceCoordinator.speak(msg, autoListenAfter = false)
+                pendingVoiceAfterMicPermission = false
+                pendingLiveCameraAfterPermission = false
+                pendingLiveCameraFullScreen = false
+                pendingSceneQuestionAfterCamera = null
+                pendingReadTextTargetAfterCamera = null
+                pendingLocationAction = null
+            }
             val next = pendingOnboardingPermissionQueue.removeFirstOrNull()
             if (next != null) {
                 _assistState.update { it.copy(pendingPermissionPrompt = next) }
@@ -535,16 +554,33 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun dismissPermissionPrompt() {
-        _assistState.update { it.copy(pendingPermissionPrompt = null) }
-        if (_onboardingState.value.awaitingPermissionBatch) {
-            val next = pendingOnboardingPermissionQueue.removeFirstOrNull()
-            if (next != null) {
-                _assistState.update { it.copy(pendingPermissionPrompt = next) }
-            } else {
-                _onboardingState.update { it.copy(awaitingPermissionBatch = false) }
-                onOnboardingPermissionBatchFinished()
-            }
+        waitingPermissionRequest = null
+        _assistState.update {
+            it.copy(
+                pendingPermissionPrompt = null,
+                isWaitingForPermissionResult = false
+            )
         }
+        if (_onboardingState.value.awaitingPermissionBatch) {
+            pendingOnboardingPermissionQueue.clear()
+            _onboardingState.update { it.copy(awaitingPermissionBatch = false) }
+        }
+    }
+
+    fun beginPermissionRequest(permission: ClearPathPermission): Boolean {
+        if (_assistState.value.isWaitingForPermissionResult ||
+            waitingPermissionRequest != null ||
+            _assistState.value.pendingPermissionPrompt != permission
+        ) {
+            return false
+        }
+        waitingPermissionRequest = permission
+        _assistState.update { it.copy(isWaitingForPermissionResult = true) }
+        voiceCoordinator.speak(
+            "Waiting for Android to confirm ${permission.title}.",
+            autoListenAfter = false
+        )
+        return true
     }
 
     fun bindCameraPreview(
@@ -2836,6 +2872,8 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
+        waitingPermissionRequest = null
+        pendingOnboardingPermissionQueue.clear()
         locationUpdatesJob?.cancel()
         compassJob?.cancel()
         cameraController.release()

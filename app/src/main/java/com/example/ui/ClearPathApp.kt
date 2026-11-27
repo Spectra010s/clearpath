@@ -156,26 +156,28 @@ fun ClearPathApp(
     assistState.pendingPermissionPrompt?.let { perm ->
         PermissionRationaleDialog(
             permission = perm,
+            isWaiting = assistState.isWaitingForPermissionResult,
             onConfirm = {
-                viewModel.dismissPermissionPrompt()
-                when (perm) {
-                    ClearPathPermission.MICROPHONE ->
-                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    ClearPathPermission.CAMERA ->
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    ClearPathPermission.LOCATION ->
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
+                if (viewModel.beginPermissionRequest(perm)) {
+                    when (perm) {
+                        ClearPathPermission.MICROPHONE ->
+                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        ClearPathPermission.CAMERA ->
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        ClearPathPermission.LOCATION ->
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
                             )
-                        )
-                    ClearPathPermission.NOTIFICATIONS ->
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            viewModel.onPermissionResult(ClearPathPermission.NOTIFICATIONS, true)
-                        }
+                        ClearPathPermission.NOTIFICATIONS ->
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.onPermissionResult(ClearPathPermission.NOTIFICATIONS, true)
+                            }
+                    }
                 }
             },
             onDismiss = { viewModel.dismissPermissionPrompt() }
