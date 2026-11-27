@@ -212,12 +212,16 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
                 _settings.value = prefs
                 haptics.enabled = prefs.hapticsEnabled
                 cameraController.setSceneWatchEnabled(prefs.sceneWatchEnabled)
-                voiceCoordinator.updatePreferences(
-                    speechRate = prefs.speechRate,
-                    preferredVoiceName = prefs.preferredVoiceName,
-                    spokenLocaleTag = prefs.spokenLanguageTag,
-                    continuousConversation = prefs.continuousConversation
-                )
+                // TTS voice lookup is a binder call and can block for seconds.
+                // Keep it off the main thread so foreground services can start in time.
+                withContext(Dispatchers.Default) {
+                    voiceCoordinator.updatePreferences(
+                        speechRate = prefs.speechRate,
+                        preferredVoiceName = prefs.preferredVoiceName,
+                        spokenLocaleTag = prefs.spokenLanguageTag,
+                        continuousConversation = prefs.continuousConversation
+                    )
+                }
                 val src = LanguageCatalog.findByCodeOrName(prefs.translationSourceCode)
                     ?: LanguageCatalog.autoDetect
                 val tgt = LanguageCatalog.findByCodeOrName(prefs.translationTargetCode)
