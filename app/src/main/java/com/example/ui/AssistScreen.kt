@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Videocam
