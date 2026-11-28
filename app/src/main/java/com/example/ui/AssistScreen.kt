@@ -10,6 +10,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -39,8 +41,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Stop
@@ -227,179 +230,181 @@ fun AssistScreen(
 
 
             // Gemini-Live Style Camera Share Viewfinder Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
-                border = BorderStroke(if (isLiveCameraShareActive) 2.dp else 1.dp, liveBorderColor),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
+                    border = BorderStroke(if (isLiveCameraShareActive) 2.dp else 1.dp, liveBorderColor),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = "Camera",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = HighContrastText,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
-                                    onFlipCamera(
-                                        lifecycleOwner,
-                                        if (settings.showCameraPreview) previewView else null
-                                    )
-                                },
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("flip_camera_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Cameraswitch,
-                                    contentDescription = if (useBackCamera) "Switch to front camera" else "Switch to back camera"
-                                )
-                            }
-                            IconButton(
-                                onClick = onOpenFullScreenCamera,
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("fullscreen_camera_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Fullscreen,
-                                    contentDescription = "Open full-screen camera"
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = { onTogglePreviewVisible(!settings.showCameraPreview) },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("toggle_preview_button")
-                                    .semantics {
-                                        contentDescription = if (settings.showCameraPreview) {
-                                            "Collapse visual viewfinder"
-                                        } else {
-                                            "Expand visual viewfinder"
-                                        }
-                                    }
-                            ) {
-                                Icon(
-                                    imageVector = if (settings.showCameraPreview) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                    contentDescription = null,
-                                    tint = RestrainedCyan
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (settings.showCameraPreview) "Collapse" else "Expand")
-                            }
-                        }
-                    }
-
-                    // Simple square camera viewfinder with a Share / Stop control at the bottom
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black)
-                            .semantics {
-                                contentDescription = if (isLiveCameraShareActive) {
-                                    "Live continuous camera stream active"
-                                } else {
-                                    "Camera preview"
-                                }
-                            }
-                    ) {
-                        if (permissions.hasCamera && settings.showCameraPreview) {
-                            AndroidView(
-                                factory = { previewView },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(ObsidianBackground),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = when {
-                                        !permissions.hasCamera -> "Camera access needed for live stream"
-                                        isLiveCameraShareActive -> "Preview collapsed"
-                                        else -> "Visual preview hidden"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = HighContrastSecondaryText,
-                                    modifier = Modifier.padding(horizontal = 24.dp)
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(72.dp)
-                                .align(Alignment.BottomCenter)
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))
-                                    )
-                                )
-                        )
-
-                        // Bottom floating Gemini-Live style Share Camera pill inside viewfinder
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter)
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(
-                                onClick = onToggleLiveCameraShare,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isLiveCameraShareActive) AlertCoral else ReadyEmerald,
-                                    contentColor = OnWarmAmber
-                                ),
-                                modifier = Modifier
-                                    .heightIn(min = 40.dp)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("live_camera_share_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (isLiveCameraShareActive) Icons.Rounded.VideocamOff else Icons.Rounded.Videocam,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isLiveCameraShareActive) "Stop" else "Share",
-                                    style = MaterialTheme.typography.labelLarge
-                                )
+                            Text(
+                                text = "Camera",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = HighContrastText,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        onFlipCamera(
+                                            lifecycleOwner,
+                                            if (settings.showCameraPreview) previewView else null
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("flip_camera_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Cameraswitch,
+                                        contentDescription = if (useBackCamera) "Switch to front camera" else "Switch to back camera"
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onOpenFullScreenCamera,
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("fullscreen_camera_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Fullscreen,
+                                        contentDescription = "Open full-screen camera"
+                                    )
+                                }
                             }
                         }
-                    }
 
+                        // Simple square camera viewfinder with a Share / Stop control at the bottom
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black)
+                                .semantics {
+                                    contentDescription = if (isLiveCameraShareActive) {
+                                        "Live continuous camera stream active"
+                                    } else {
+                                        "Camera preview"
+                                    }
+                                }
+                        ) {
+                            if (permissions.hasCamera && settings.showCameraPreview) {
+                                AndroidView(
+                                    factory = { previewView },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(ObsidianBackground),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = when {
+                                            !permissions.hasCamera -> "Camera access needed for live stream"
+                                            isLiveCameraShareActive -> "Preview collapsed"
+                                            else -> "Visual preview hidden"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = HighContrastSecondaryText,
+                                        modifier = Modifier.padding(horizontal = 24.dp)
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(72.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))
+                                        )
+                                    )
+                            )
+
+                            // Bottom floating Gemini-Live style Share Camera pill inside viewfinder
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = onToggleLiveCameraShare,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isLiveCameraShareActive) AlertCoral else ReadyEmerald,
+                                        contentColor = OnWarmAmber
+                                    ),
+                                    modifier = Modifier
+                                        .heightIn(min = 40.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("live_camera_share_button")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isLiveCameraShareActive) Icons.Rounded.VideocamOff else Icons.Rounded.Videocam,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isLiveCameraShareActive) "Stop" else "Share",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
+                        }
+
+                    }
+                }
+
+                IconButton(
+                    onClick = { onTogglePreviewVisible(!settings.showCameraPreview) },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-14).dp)
+                        .size(28.dp)
+                        .background(ObsidianSurfaceElevated, CircleShape)
+                        .border(1.dp, ObsidianBorder, CircleShape)
+                        .testTag("toggle_preview_button")
+                        .semantics {
+                            contentDescription = if (settings.showCameraPreview) {
+                                "Collapse camera preview"
+                            } else {
+                                "Expand camera preview"
+                            }
+                        }
+                ) {
+                    Icon(
+                        imageVector = if (settings.showCameraPreview) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = RestrainedCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
-
-
         }
 
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
-                .navigationBarsPadding()
         ) {
             val sessionActive = liveState.isActive || liveState.isConnecting ||
                 voiceState.isSessionActive || voiceState.phase == VoicePhase.SPEAKING ||
@@ -418,11 +423,11 @@ fun AssistScreen(
                 }
             }
             val (fabIcon, fabContainer) = when {
-                liveState.isConnecting -> Icons.Rounded.HourglassTop to RestrainedCyan
+                liveState.isConnecting -> Icons.Rounded.Mic to RestrainedCyan
                 liveState.isActive -> Icons.Rounded.GraphicEq to ReadyEmerald
                 voiceState.phase == VoicePhase.SPEAKING -> Icons.Rounded.Mic to WarmAmber
                 voiceState.phase == VoicePhase.LISTENING -> Icons.Rounded.Mic to ReadyEmerald
-                voiceState.phase == VoicePhase.PROCESSING -> Icons.Rounded.HourglassTop to RestrainedCyan
+                voiceState.phase == VoicePhase.PROCESSING -> Icons.Rounded.Mic to RestrainedCyan
                 else -> Icons.Rounded.Mic to WarmAmber
             }
             SmallFloatingActionButton(
