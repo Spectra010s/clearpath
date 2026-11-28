@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -325,24 +323,6 @@ fun ClearPathApp(
                         onScenerySummary = viewModel::requestScenerySummary
                     )
 
-                    ClearPathTab.NAVIGATE -> NavigationScreen(
-                        navState = navigationState,
-                        voiceState = voiceState,
-                        onStartCompass = viewModel::startCompassObservation,
-                        onWhereAmI = viewModel::checkCurrentLocationAndAnnounce,
-                        onDestinationChange = viewModel::updateDestinationQuery,
-                        onSearchAndRoute = viewModel::searchAndStartNavigation,
-                        onSelectCandidate = { viewModel.startRouteToCandidate(it) },
-                        onOpenInMapsApp = { viewModel.openInPhoneMaps() },
-                        onCheckPathAhead = viewModel::checkPathAheadFromNavigation,
-                        onCheckRouteStatus = viewModel::announceNavigationStatus,
-                        onStopNavigation = viewModel::stopNavigation,
-                        onPrimaryVoiceTap = viewModel::onPrimaryVoiceButtonPressed,
-                        onEndSession = viewModel::stopSpeakingOrSession,
-                        modifier = contentModifier,
-                        liveState = liveState
-                    )
-
                     ClearPathTab.SETTINGS -> SettingsScreen(
                         settings = settings,
                         voiceState = voiceState,
@@ -399,6 +379,5 @@ fun ClearPathApp(
 
 private fun tabIcon(tab: ClearPathTab, selected: Boolean) = when (tab) {
     ClearPathTab.ASSIST -> if (selected) Icons.Filled.RecordVoiceOver else Icons.Outlined.RecordVoiceOver
-    ClearPathTab.NAVIGATE -> if (selected) Icons.Filled.Navigation else Icons.Outlined.Navigation
     ClearPathTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
 }

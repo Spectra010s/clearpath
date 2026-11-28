@@ -10,11 +10,6 @@ sealed interface ClearPathIntent {
     data class AdjustSpeechRate(val delta: Float) : ClearPathIntent
     data object ListSettings : ClearPathIntent
     data class AssistantToolRequest(val utterance: String) : ClearPathIntent
-    data object WhereAmI : ClearPathIntent
-    data object NavigationStatus : ClearPathIntent
-    data object StopNavigation : ClearPathIntent
-    data class OpenInMapsApp(val query: String?) : ClearPathIntent
-    data class NavigateTo(val query: String) : ClearPathIntent
     data class ReadCameraText(val targetLanguage: SupportedLanguage?) : ClearPathIntent
     data class TranslateSpeech(val textToTranslate: String?, val targetLanguage: SupportedLanguage) : ClearPathIntent
     data class DescribeScene(val question: String) : ClearPathIntent
@@ -63,49 +58,6 @@ object VoiceIntentParser {
 
         if (isAssistantToolQuery(lower)) {
             return ClearPathIntent.AssistantToolRequest(text)
-        }
-
-        if (lower.contains("where am i") || lower.contains("my location") || lower.contains("current address")) {
-            return ClearPathIntent.WhereAmI
-        }
-
-        if (lower.contains("stop navigation") || lower.contains("cancel navigation") || lower.contains("end navigation") || lower.contains("cancel route")) {
-            return ClearPathIntent.StopNavigation
-        }
-
-        if (lower.contains("open in maps") || lower.contains("open maps") || lower.contains("use google maps") || lower.contains("launch maps")) {
-            val dest = text.substringAfter("to ", "").trim().takeIf { it.isNotBlank() }
-            return ClearPathIntent.OpenInMapsApp(dest)
-        }
-
-        if (lower.contains("am i still on") || lower.contains("correct route") || lower.contains("on route") ||
-            lower.contains("where should i turn") || lower.contains("next turn")
-        ) {
-            return ClearPathIntent.NavigationStatus
-        }
-
-        val navPrefixes = listOf(
-            "take me to ",
-            "navigate to ",
-            "directions to ",
-            "how do i get to ",
-            "guide me to ",
-            "walk me to ",
-            "find the nearest ",
-            "nearest "
-        )
-        for (prefix in navPrefixes) {
-            val idx = lower.indexOf(prefix)
-            if (idx >= 0) {
-                val query = if (prefix == "nearest " || prefix == "find the nearest ") {
-                    text.substring(idx).removePrefix("find the ").trim()
-                } else {
-                    text.substring(idx + prefix.length).trim()
-                }
-                if (query.isNotEmpty()) {
-                    return ClearPathIntent.NavigateTo(query)
-                }
-            }
         }
 
         if (lower.contains("translate")) {
@@ -157,6 +109,21 @@ object VoiceIntentParser {
     }
 
     private fun isAssistantToolQuery(lower: String): Boolean {
+        val isLocationOrNavigation = lower.contains("where am i") ||
+            lower.contains("my location") || lower.contains("current address") ||
+            lower.contains("navigate") || lower.contains("directions") ||
+            lower.contains("take me to") || lower.contains("walk me to") ||
+            lower.contains("guide me to") || lower.contains("how do i get to") ||
+            lower.contains("nearest") || lower.contains("next turn") ||
+            lower.contains("where should i turn") || lower.contains("am i still on") ||
+            lower.contains("correct route") || lower.contains("on route") ||
+            lower.contains("stop navigation") || lower.contains("cancel navigation") ||
+            lower.contains("end navigation") || lower.contains("cancel route") ||
+            lower.contains("open in maps") || lower.contains("open maps") ||
+            lower.contains("use google maps") || lower.contains("launch maps")
+        if (isLocationOrNavigation) {
+            return true
+        }
         val isLiveInterpreterOrScenery = lower.contains("listen and translate") ||
             lower.contains("listen & translate") ||
             lower.contains("listen and interpret") ||

@@ -35,22 +35,19 @@ class ClearPathUnitTests {
             ClearPathIntent.EndSession,
             VoiceIntentParser.parse("End session", hasPriorSceneContext = true)
         )
-        assertEquals(
-            ClearPathIntent.WhereAmI,
-            VoiceIntentParser.parse("Where am I right now?", hasPriorSceneContext = false)
-        )
-        assertEquals(
-            ClearPathIntent.NavigationStatus,
-            VoiceIntentParser.parse("Am I still on the correct route?", hasPriorSceneContext = false)
-        )
-        assertEquals(
-            ClearPathIntent.StopNavigation,
-            VoiceIntentParser.parse("Stop navigation", hasPriorSceneContext = false)
-        )
-
-        val navIntent = VoiceIntentParser.parse("Take me to the nearest pharmacy", hasPriorSceneContext = false)
-        assertTrue(navIntent is ClearPathIntent.NavigateTo)
-        assertEquals("the nearest pharmacy", (navIntent as ClearPathIntent.NavigateTo).query)
+        listOf(
+            "Where am I right now?",
+            "Am I still on the correct route?",
+            "Stop navigation",
+            "Take me to the nearest pharmacy",
+            "Open in maps to Ikeja City Mall"
+        ).forEach { utterance ->
+            assertTrue(
+                "$utterance should go through the AI tool path",
+                VoiceIntentParser.parse(utterance, hasPriorSceneContext = false) is
+                    ClearPathIntent.AssistantToolRequest
+            )
+        }
 
         val sceneIntent = VoiceIntentParser.parse("What is in front of me?", hasPriorSceneContext = true)
         assertTrue(sceneIntent is ClearPathIntent.DescribeScene)
@@ -144,9 +141,6 @@ class ClearPathUnitTests {
         assertTrue("Expected ~90 deg east, got $brng", brng in 85f..95f)
         assertEquals("to your right", NavigationEngine.relativeTurnCue(0f, 90f))
         assertEquals("straight ahead", NavigationEngine.relativeTurnCue(88f, 90f))
-
-        val mapsIntent = VoiceIntentParser.parse("Open in maps to Ikeja City Mall", hasPriorSceneContext = false)
-        assertTrue(mapsIntent is ClearPathIntent.OpenInMapsApp)
 
         assertEquals(
             "Turn left onto Herbert Macaulay Way",

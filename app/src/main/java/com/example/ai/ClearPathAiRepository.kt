@@ -54,6 +54,9 @@ class ClearPathAiRepository {
             6. If lighting is poor, blurry, shadowed, or partially occluded, say so honestly first.
             7. Write natural spoken language suitable for Text-to-Speech: no markdown bullets, asterisks, or emojis.
             8. You can control ClearPath directly via tools—NEVER tell a blind user to switch tabs or tap settings menus when you can inspect or change a setting or run a tool for them.
+            9. For "where am I", my location, my current address, or which direction am I facing, call get_current_location and speak the address and heading naturally.
+            10. For destination search or walking guidance, call start_walking_guidance. For route status call get_navigation_status, to stop call stop_navigation, and to hand off to a maps app call open_phone_maps.
+            11. Never tell the user to open a tab or press a button for these tasks—do them with tools.
             """.trimIndent()
         )
     }

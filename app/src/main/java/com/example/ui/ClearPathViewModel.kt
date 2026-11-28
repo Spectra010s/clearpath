@@ -79,7 +79,6 @@ import kotlinx.serialization.json.jsonPrimitive
 
 enum class ClearPathTab(val route: String, val label: String) {
     ASSIST("assist", "Assist"),
-    NAVIGATE("navigate", "Navigate"),
     SETTINGS("settings", "Settings")
 }
 
@@ -773,21 +772,6 @@ class ClearPathViewModel(application: Application) : AndroidViewModel(applicatio
             }
             is ClearPathIntent.AssistantToolRequest -> {
                 runAssistantWithTools(intent.utterance)
-            }
-            is ClearPathIntent.WhereAmI -> {
-                checkCurrentLocationAndAnnounce()
-            }
-            is ClearPathIntent.NavigationStatus -> {
-                announceNavigationStatus()
-            }
-            is ClearPathIntent.StopNavigation -> {
-                stopNavigation()
-            }
-            is ClearPathIntent.OpenInMapsApp -> {
-                openInPhoneMaps(intent.query)
-            }
-            is ClearPathIntent.NavigateTo -> {
-                searchAndStartNavigation(intent.query)
             }
             is ClearPathIntent.ReadCameraText -> {
                 readTextFromCamera(intent.targetLanguage)
