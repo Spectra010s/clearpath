@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val ClearPathDarkScheme = darkColorScheme(
@@ -16,13 +17,29 @@ private val ClearPathDarkScheme = darkColorScheme(
     onSecondary = OnRestrainedCyan,
     secondaryContainer = RestrainedCyanContainer,
     onSecondaryContainer = OnRestrainedCyanContainer,
+    tertiary = RestrainedCyan,
+    onTertiary = OnRestrainedCyan,
+    tertiaryContainer = RestrainedCyanContainer,
+    onTertiaryContainer = OnRestrainedCyanContainer,
     background = ObsidianBackground,
     onBackground = HighContrastText,
     surface = ObsidianSurface,
     onSurface = HighContrastText,
     surfaceVariant = ObsidianSurfaceElevated,
     onSurfaceVariant = HighContrastSecondaryText,
+    surfaceDim = ObsidianBackground,
+    surfaceBright = ObsidianSurfaceElevated,
+    surfaceContainerLowest = ObsidianBackground,
+    surfaceContainerLow = ObsidianSurface,
+    surfaceContainer = ObsidianSurface,
+    surfaceContainerHigh = ObsidianSurfaceElevated,
+    surfaceContainerHighest = ObsidianSurfaceHighest,
     outline = ObsidianBorder,
+    outlineVariant = ObsidianBorder,
+    inverseSurface = HighContrastText,
+    inverseOnSurface = ObsidianBackground,
+    inversePrimary = WarmAmberContainer,
+    scrim = Color.Black,
     error = AlertCoral,
     onError = OnWarmAmber,
     errorContainer = AlertCoralContainer,

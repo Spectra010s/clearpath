@@ -70,7 +70,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.onboarding.ManualSetupStep
@@ -232,7 +231,9 @@ private fun VoiceFirstSetupLayer(
                 text = "ClearPath Setup",
                 style = MaterialTheme.typography.titleLarge,
                 color = HighContrastText,
-                fontWeight = FontWeight.Bold
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
             )
             Surface(
                 color = ObsidianSurfaceElevated,
@@ -275,7 +276,8 @@ private fun VoiceFirstSetupLayer(
                 isConnecting = liveState.isConnecting || voiceState.phase == VoicePhase.PROCESSING,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp)
+                    .weight(1f, fill = false)
+                    .heightIn(max = 240.dp)
                     .semantics {
                         liveRegion = LiveRegionMode.Polite
                         contentDescription = statusA11yText
@@ -539,12 +541,15 @@ private fun ManualSetupLayer(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
                 Text(
                     text = currentStep.title,
                     style = MaterialTheme.typography.titleLarge,
-                    color = HighContrastText,
-                    fontWeight = FontWeight.Bold
+                    color = HighContrastText
                 )
                 Text(
                     text = "Manual Setup · Step ${currentStep.stepNumber} of 3",

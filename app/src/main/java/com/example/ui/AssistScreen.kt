@@ -72,7 +72,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -227,8 +226,7 @@ fun AssistScreen(
                             Text(
                                 text = "Live Camera Share",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = if (isLiveCameraShareActive) ReadyEmerald else HighContrastText,
-                                fontWeight = FontWeight.SemiBold
+                                color = if (isLiveCameraShareActive) ReadyEmerald else HighContrastText
                             )
                             Text(
                                 text = when {
@@ -343,7 +341,8 @@ fun AssistScreen(
                                 border = BorderStroke(
                                     1.dp,
                                     if (isLiveCameraShareActive) ReadyEmerald else ObsidianBorder
-                                )
+                                ),
+                                modifier = Modifier.weight(1f, fill = false)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -423,6 +422,7 @@ fun AssistScreen(
                                     contentColor = OnWarmAmber
                                 ),
                                 modifier = Modifier
+                                    .weight(1f, fill = false)
                                     .heightIn(min = 48.dp)
                                     .minimumInteractiveComponentSize()
                                     .testTag("live_camera_share_button")
@@ -435,8 +435,7 @@ fun AssistScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = if (isLiveCameraShareActive) "Pause Camera Stream" else "Share Live Camera",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
+                                    style = MaterialTheme.typography.labelLarge
                                 )
                             }
 
@@ -509,7 +508,12 @@ fun AssistScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
                                 imageVector = Icons.Rounded.AutoAwesome,
                                 contentDescription = null,
@@ -653,8 +657,7 @@ fun AssistScreen(
                             } else {
                                 "Listen & Translate Nearby Speaker"
                             },
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                 }
@@ -779,7 +782,8 @@ fun GeminiLiveCameraOverlay(
                 border = BorderStroke(
                     1.dp,
                     if (isLiveCameraShareActive) ReadyEmerald else ObsidianBorder
-                )
+                ),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
