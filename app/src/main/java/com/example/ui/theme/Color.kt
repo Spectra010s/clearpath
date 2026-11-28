@@ -5,7 +5,8 @@ import androidx.compose.ui.graphics.Color
 val ObsidianBackground = Color(0xFF090B0E)
 val ObsidianSurface = Color(0xFF12161D)
 val ObsidianSurfaceElevated = Color(0xFF1B212B)
-val ObsidianBorder = Color(0xFF334155)
+val ObsidianSurfaceHighest = Color(0xFF242C38)
+val ObsidianBorder = Color(0xFF6B7C94)
 
 val WarmAmber = Color(0xFFFFB300)
 val WarmAmberPressed = Color(0xFFFFCA28)
