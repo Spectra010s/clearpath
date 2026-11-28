@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +39,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Translate
@@ -49,13 +53,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -72,6 +78,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -92,6 +99,7 @@ import com.example.voice.GeminiLiveState
 import com.example.voice.VoicePhase
 import com.example.voice.VoiceUiState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssistScreen(
     voiceState: VoiceUiState,
@@ -151,18 +159,12 @@ fun AssistScreen(
         label = "liveDotAlpha"
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        VoiceStatusBanner(voiceState = voiceState, liveState = liveState)
-
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(scrollState),
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (liveState.isActive ||
@@ -191,9 +193,25 @@ fun AssistScreen(
                                 .height(104.dp)
                                 .testTag("assist_decibel_visualizer")
                         )
+
+                        Text(
+                            text = assistState.latestAnswer,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = HighContrastText,
+                            modifier = Modifier.testTag("latest_answer_text")
+                        )
+                        assistState.errorMessage?.let { err ->
+                            Text(
+                                text = err,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AlertCoral,
+                                modifier = Modifier.testTag("assist_error_text")
+                            )
+                        }
+
                         Text(
                             text = if (liveState.isActive) {
-                                "ClearPath Live (${liveState.currentVoiceName}) · Speak anytime to interrupt"
+                                "Speak anytime to interrupt"
                             } else if (liveState.isConnecting) {
                                 "Connecting real-time audio..."
                             } else {
@@ -206,12 +224,13 @@ fun AssistScreen(
                 }
             }
 
+
             // Gemini-Live Style Camera Share Viewfinder Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
                 border = BorderStroke(if (isLiveCameraShareActive) 2.dp else 1.dp, liveBorderColor),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -222,58 +241,77 @@ fun AssistScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Live Camera Share",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (isLiveCameraShareActive) ReadyEmerald else HighContrastText
-                            )
-                            Text(
-                                text = when {
-                                    !permissions.hasCamera -> "Tap Share Live Camera to grant camera access and stream continuously."
-                                    isLiveCameraShareActive -> "Streaming continuous 1 FPS video to ClearPath Live (${liveState.framesSentCount} frames)."
-                                    isCameraReady -> "Stream continuously like Gemini Live, or ask one-shot questions."
-                                    else -> "Preparing camera..."
+                        Text(
+                            text = "Camera",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = HighContrastText,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    onFlipCamera(
+                                        lifecycleOwner,
+                                        if (settings.showCameraPreview) previewView else null
+                                    )
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = HighContrastSecondaryText
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { onTogglePreviewVisible(!settings.showCameraPreview) },
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("toggle_preview_button")
-                                .semantics {
-                                    contentDescription = if (settings.showCameraPreview) {
-                                        "Hide visual viewfinder to save battery"
-                                    } else {
-                                        "Show visual viewfinder"
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("flip_camera_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Cameraswitch,
+                                    contentDescription = if (useBackCamera) "Switch to front camera" else "Switch to back camera"
+                                )
+                            }
+                            IconButton(
+                                onClick = onOpenFullScreenCamera,
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("fullscreen_camera_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Fullscreen,
+                                    contentDescription = "Open full-screen camera"
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { onTogglePreviewVisible(!settings.showCameraPreview) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("toggle_preview_button")
+                                    .semantics {
+                                        contentDescription = if (settings.showCameraPreview) {
+                                            "Collapse visual viewfinder"
+                                        } else {
+                                            "Expand visual viewfinder"
+                                        }
                                     }
-                                }
-                        ) {
-                            Icon(
-                                imageVector = if (settings.showCameraPreview) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                contentDescription = null,
-                                tint = RestrainedCyan
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (settings.showCameraPreview) "Hide" else "Show")
+                            ) {
+                                Icon(
+                                    imageVector = if (settings.showCameraPreview) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = null,
+                                    tint = RestrainedCyan
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (settings.showCameraPreview) "Collapse" else "Expand")
+                            }
                         }
                     }
 
-                    // Gemini Live style rounded camera viewfinder with top badge & bottom control dock
+                    // Simple square camera viewfinder with a Share / Stop control at the bottom
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(250.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black)
                             .semantics {
                                 contentDescription = if (isLiveCameraShareActive) {
                                     "Live continuous camera stream active"
                                 } else {
-                                    "Camera viewfinder standby"
+                                    "Camera preview"
                                 }
                             }
                     ) {
@@ -292,7 +330,7 @@ fun AssistScreen(
                                 Text(
                                     text = when {
                                         !permissions.hasCamera -> "Camera access needed for live stream"
-                                        isLiveCameraShareActive -> "Battery-saver preview hidden · Streaming 1 FPS to Live AI"
+                                        isLiveCameraShareActive -> "Preview collapsed"
                                         else -> "Visual preview hidden"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
@@ -302,107 +340,17 @@ fun AssistScreen(
                             }
                         }
 
-                        // Subtle top & bottom scrims
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
-                                .align(Alignment.TopCenter)
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(Color.Black.copy(alpha = 0.68f), Color.Transparent)
-                                    )
-                                )
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(88.dp)
+                                .height(72.dp)
                                 .align(Alignment.BottomCenter)
                                 .background(
                                     Brush.verticalGradient(
-                                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))
+                                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))
                                     )
                                 )
                         )
-
-                        // Top overlay: LIVE status pill + Flip & Fullscreen buttons
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.TopCenter)
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                color = ObsidianBackground.copy(alpha = 0.82f),
-                                shape = CircleShape,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isLiveCameraShareActive) ReadyEmerald else ObsidianBorder
-                                ),
-                                modifier = Modifier.weight(1f, fill = false)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .alpha(if (isLiveCameraShareActive) liveDotAlpha else 1f)
-                                            .clip(CircleShape)
-                                            .background(if (isLiveCameraShareActive) ReadyEmerald else HighContrastSecondaryText)
-                                    )
-                                    Text(
-                                        text = if (isLiveCameraShareActive) "LIVE · 1 FPS" else "STANDBY",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (isLiveCameraShareActive) ReadyEmerald else HighContrastText
-                                    )
-                                }
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilledIconButton(
-                                    onClick = {
-                                        onFlipCamera(
-                                            lifecycleOwner,
-                                            if (settings.showCameraPreview) previewView else null
-                                        )
-                                    },
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = ObsidianBackground.copy(alpha = 0.78f),
-                                        contentColor = HighContrastText
-                                    ),
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .testTag("flip_camera_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Cameraswitch,
-                                        contentDescription = if (useBackCamera) "Switch to front camera" else "Switch to back camera"
-                                    )
-                                }
-
-                                FilledIconButton(
-                                    onClick = onOpenFullScreenCamera,
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = ObsidianBackground.copy(alpha = 0.78f),
-                                        contentColor = WarmAmber
-                                    ),
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .testTag("fullscreen_camera_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Fullscreen,
-                                        contentDescription = "Expand Gemini Live full-screen camera view"
-                                    )
-                                }
-                            }
-                        }
 
                         // Bottom floating Gemini-Live style Share Camera pill inside viewfinder
                         Row(
@@ -415,266 +363,81 @@ fun AssistScreen(
                         ) {
                             Button(
                                 onClick = onToggleLiveCameraShare,
-                                shape = CircleShape,
-                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (isLiveCameraShareActive) AlertCoral else ReadyEmerald,
                                     contentColor = OnWarmAmber
                                 ),
                                 modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .heightIn(min = 48.dp)
+                                    .heightIn(min = 40.dp)
                                     .minimumInteractiveComponentSize()
                                     .testTag("live_camera_share_button")
                             ) {
                                 Icon(
                                     imageVector = if (isLiveCameraShareActive) Icons.Rounded.VideocamOff else Icons.Rounded.Videocam,
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isLiveCameraShareActive) "Pause Camera Stream" else "Share Live Camera",
+                                    text = if (isLiveCameraShareActive) "Stop" else "Share",
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
-
-                            if (liveState.isActive && isLiveCameraShareActive) {
-                                Surface(
-                                    color = ObsidianBackground.copy(alpha = 0.8f),
-                                    shape = CircleShape,
-                                    modifier = Modifier.width(96.dp).height(40.dp)
-                                ) {
-                                    MusicDecibelEqualizer(
-                                        decibelBands = decibelBands.take(12),
-                                        audioLevel = audioLevel,
-                                        isAiSpeaking = liveState.isAiSpeaking,
-                                        isUserSpeaking = liveState.isUserSpeaking || !liveState.isAiSpeaking,
-                                        isConnecting = liveState.isConnecting,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
                         }
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text(
-                                text = "Scene Watch (Major Change)",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = HighContrastText
-                            )
-                            Text(
-                                text = "Checks on-device light changes every 9+ seconds when live stream is off.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = HighContrastSecondaryText
-                            )
-                        }
-                        Switch(
-                            checked = settings.sceneWatchEnabled,
-                            onCheckedChange = onToggleSceneWatch,
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("scene_watch_switch")
-                                .semantics {
-                                    contentDescription = "Toggle automatic major scene change alerts"
-                                }
-                        )
-                    }
                 }
             }
 
-            // Latest spoken answer & quick actions card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
-                border = BorderStroke(1.5.dp, ObsidianBorder)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = null,
-                                tint = WarmAmber,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Latest Guidance",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WarmAmber
-                            )
-                        }
-                        assistState.lastOrigin?.let { origin ->
-                            Text(
-                                text = origin.badgeLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = RestrainedCyan
-                            )
-                        }
-                    }
 
-                    Text(
-                        text = assistState.latestAnswer,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = HighContrastText,
-                        modifier = Modifier.testTag("latest_answer_text")
-                    )
-
-                    assistState.errorMessage?.let { err ->
-                        Text(
-                            text = err,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AlertCoral,
-                            modifier = Modifier.testTag("assist_error_text")
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onRepeatLast,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp)
-                                .minimumInteractiveComponentSize()
-                                .testTag("repeat_answer_button"),
-                            border = BorderStroke(1.5.dp, RestrainedCyan)
-                        ) {
-                            Icon(Icons.Rounded.Replay, contentDescription = null, tint = RestrainedCyan)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Repeat", color = HighContrastText)
-                        }
-
-                        OutlinedButton(
-                            onClick = onReadText,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp)
-                                .minimumInteractiveComponentSize()
-                                .testTag("read_text_button"),
-                            border = BorderStroke(1.5.dp, WarmAmber)
-                        ) {
-                            Icon(Icons.Rounded.DocumentScanner, contentDescription = null, tint = WarmAmber)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Read Text", color = HighContrastText)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onDescribeScene,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 54.dp)
-                                .minimumInteractiveComponentSize()
-                                .testTag("describe_scene_button"),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = ObsidianSurfaceElevated
-                            ),
-                            border = BorderStroke(1.5.dp, WarmAmber)
-                        ) {
-                            Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = WarmAmber)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Look Ahead",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = HighContrastText
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = onScenerySummary,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 54.dp)
-                                .minimumInteractiveComponentSize()
-                                .testTag("scenery_summary_button"),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = ObsidianSurfaceElevated
-                            ),
-                            border = BorderStroke(1.5.dp, RestrainedCyan)
-                        ) {
-                            Icon(Icons.Rounded.Public, contentDescription = null, tint = RestrainedCyan)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Scenery",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = HighContrastText
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = onToggleInterpreterMode,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .minimumInteractiveComponentSize()
-                            .testTag("listen_translate_button"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (liveState.isInterpreterMode) RestrainedCyan else ObsidianSurfaceElevated,
-                            contentColor = if (liveState.isInterpreterMode) OnWarmAmber else HighContrastText
-                        ),
-                        border = BorderStroke(1.5.dp, RestrainedCyan)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Translate,
-                            contentDescription = null,
-                            tint = if (liveState.isInterpreterMode) OnWarmAmber else RestrainedCyan
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (liveState.isInterpreterMode) {
-                                "Listening & Translating Live — Tap to Stop"
-                            } else {
-                                "Listen & Translate Nearby Speaker"
-                            },
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                }
-            }
         }
 
-        PrimaryVoiceActionButton(
-            voiceState = voiceState,
-            onClick = onPrimaryVoiceTap,
-            onEndSession = onEndSession,
-            liveState = liveState
-        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .navigationBarsPadding()
+        ) {
+            val sessionActive = liveState.isActive || liveState.isConnecting ||
+                voiceState.isSessionActive || voiceState.phase == VoicePhase.SPEAKING ||
+                voiceState.phase == VoicePhase.LISTENING || voiceState.phase == VoicePhase.PROCESSING
+            if (sessionActive) {
+                SmallFloatingActionButton(
+                    onClick = onEndSession,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(bottom = 8.dp)
+                        .testTag("end_session_button"),
+                    containerColor = AlertCoral,
+                    contentColor = OnWarmAmber
+                ) {
+                    Icon(Icons.Rounded.Stop, contentDescription = "Stop Speaking & End Session")
+                }
+            }
+            val (fabIcon, fabContainer) = when {
+                liveState.isConnecting -> Icons.Rounded.HourglassTop to RestrainedCyan
+                liveState.isActive -> Icons.Rounded.GraphicEq to ReadyEmerald
+                voiceState.phase == VoicePhase.SPEAKING -> Icons.Rounded.Mic to WarmAmber
+                voiceState.phase == VoicePhase.LISTENING -> Icons.Rounded.Mic to ReadyEmerald
+                voiceState.phase == VoicePhase.PROCESSING -> Icons.Rounded.HourglassTop to RestrainedCyan
+                else -> Icons.Rounded.Mic to WarmAmber
+            }
+            SmallFloatingActionButton(
+                onClick = onPrimaryVoiceTap,
+                modifier = Modifier.testTag("primary_voice_button"),
+                containerColor = fabContainer,
+                contentColor = OnWarmAmber
+            ) {
+                Icon(fabIcon, contentDescription = "Toggle live voice")
+            }
+        }
     }
 }
 
 /**
- * Full-screen Gemini Live Camera Share experience: continuous 1 FPS live camera stream,
+ * Full-screen camera experience: live camera stream,
  * audio-reactive equalizer bars, and floating translucent control dock.
  */
 @Composable
@@ -743,7 +506,7 @@ fun GeminiLiveCameraOverlay(
             ) {
                 Text(
                     text = if (isLiveCameraShareActive) {
-                        "Audio & Live 1 FPS stream active (preview hidden to save battery)"
+                        "Audio and camera active (preview hidden)"
                     } else {
                         "Camera preview hidden"
                     },
@@ -799,7 +562,7 @@ fun GeminiLiveCameraOverlay(
                     )
                     Text(
                         text = if (isLiveCameraShareActive) {
-                            "ClearPath Live · ${liveState.currentVoiceName} · 1 FPS"
+                            liveState.currentVoiceName
                         } else {
                             "Camera Paused · ${liveState.currentVoiceName}"
                         },
@@ -842,11 +605,11 @@ fun GeminiLiveCameraOverlay(
             }
         }
 
-        // Bottom gradient + equalizer + floating control pill dock
+        // Bottom gradient + equalizer + spoken words
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(180.dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
@@ -877,105 +640,17 @@ fun GeminiLiveCameraOverlay(
                     .testTag("fullscreen_camera_equalizer")
             )
 
-            Surface(
-                color = ObsidianSurface.copy(alpha = 0.90f),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, ObsidianBorder)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilledIconButton(
-                        onClick = onToggleLiveCameraShare,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (isLiveCameraShareActive) ReadyEmerald else ObsidianSurfaceElevated,
-                            contentColor = if (isLiveCameraShareActive) OnWarmAmber else HighContrastText
-                        ),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .testTag("fullscreen_toggle_stream_button")
-                    ) {
-                        Icon(
-                            imageVector = if (isLiveCameraShareActive) Icons.Rounded.Videocam else Icons.Rounded.VideocamOff,
-                            contentDescription = if (isLiveCameraShareActive) "Pause camera stream" else "Resume camera stream"
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = {
-                            onFlipCamera(
-                                lifecycleOwner,
-                                if (settings.showCameraPreview) previewView else null
-                            )
-                        },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = ObsidianSurfaceElevated,
-                            contentColor = HighContrastText
-                        ),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .testTag("fullscreen_flip_camera_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Cameraswitch,
-                            contentDescription = if (useBackCamera) "Switch to front camera" else "Switch to back camera"
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = onToggleInterpreterMode,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (liveState.isInterpreterMode) RestrainedCyan else ObsidianSurfaceElevated,
-                            contentColor = if (liveState.isInterpreterMode) OnWarmAmber else RestrainedCyan
-                        ),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .testTag("fullscreen_interpreter_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Translate,
-                            contentDescription = if (liveState.isInterpreterMode) {
-                                "Stop live listen and translate"
-                            } else {
-                                "Listen and translate nearby speaker"
-                            }
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = onReadText,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = ObsidianSurfaceElevated,
-                            contentColor = WarmAmber
-                        ),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .testTag("fullscreen_read_text_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DocumentScanner,
-                            contentDescription = "Read visible text"
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = onEndLiveSession,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = AlertCoral,
-                            contentColor = OnWarmAmber
-                        ),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .testTag("fullscreen_end_live_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "End live camera and voice session"
-                        )
-                    }
-                }
+            val fullModeText = liveState.outputTranscript.ifBlank { liveState.inputTranscript }
+            if (fullModeText.isNotBlank()) {
+                Text(
+                    text = fullModeText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = HighContrastText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
             }
         }
     }
